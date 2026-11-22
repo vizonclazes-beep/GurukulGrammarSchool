@@ -225,11 +225,33 @@ export function createCelestialTelemetry(orreryGroup, camera) {
   reticleMesh.rotation.x = Math.PI / 2;
   cardGroup.add(reticleMesh);
 
+  // ── Helper to detect mobile mode (viewports <= 768px or mobile devices) ──
+  function isMobileMode() {
+    return (
+      window.innerWidth <= 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      ('ontouchstart' in window && window.innerWidth <= 1024)
+    );
+  }
+
   // ── 2D HUD DRAWER (Bottom-Right Scientific Overlay) ──
   let hudContainer = document.getElementById('celestial-telemetry-hud');
   if (!hudContainer) {
     hudContainer = document.createElement('div');
     hudContainer.id = 'celestial-telemetry-hud';
+
+    // Inject mobile-suppression CSS rule so 2D celestial data popup is never visible in mobile mode
+    const hudStyle = document.createElement('style');
+    hudStyle.textContent = `
+      @media (max-width: 768px) {
+        #celestial-telemetry-hud {
+          display: none !important;
+          pointer-events: none !important;
+        }
+      }
+    `;
+    document.head.appendChild(hudStyle);
+
     hudContainer.style.cssText = `
       position: fixed;
       bottom: 24px;
@@ -277,6 +299,12 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(`★ CELESTIAL TELEMETRY // ${data.name}`, 24, 30);
+
+    // Dismiss indicator
+    ctx.font = 'bold 20px "Inter", sans-serif';
+    ctx.fillStyle = '#0a0e1c';
+    ctx.textAlign = 'right';
+    ctx.fillText('✕', 1000, 30);
 
     // Subtitle Designation
     ctx.font = 'bold 18px "Inter", monospace';
@@ -376,7 +404,14 @@ export function createCelestialTelemetry(orreryGroup, camera) {
 
     currentTarget = { mesh, dataKey, data };
     render3DCard(data);
-    render2DHUD(data);
+
+    // In mobile mode, do not show 2D celestial data popup; only show 3D celestial telemetry
+    if (!isMobileMode()) {
+      render2DHUD(data);
+    } else {
+      hudContainer.style.transform = 'translateY(120%)';
+      hudContainer.style.opacity = '0';
+    }
 
     cardGroup.visible = true;
     lineMat.color.set(data.accentColor);
@@ -425,6 +460,8 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     selectBody,
     deselect,
     update,
+    getCurrentTarget: () => currentTarget,
+    cardMesh,
     cardGroup,
   };
 }

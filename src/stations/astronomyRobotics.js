@@ -240,7 +240,15 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
       const targetName = hitObj.userData?.name || hitObj.parent?.userData?.name;
       const targetMesh = hitObj.userData?.isHitBox ? hitObj.parent : hitObj;
       if (targetName && CELESTIAL_DATA[targetName]) {
-        telemetry.selectBody(targetMesh, targetName);
+        if (telemetry.getCurrentTarget && telemetry.getCurrentTarget()?.dataKey === targetName) {
+          telemetry.deselect();
+        } else {
+          telemetry.selectBody(targetMesh, targetName);
+        }
+      }
+    } else {
+      if (telemetry.getCurrentTarget && telemetry.getCurrentTarget()) {
+        telemetry.deselect();
       }
     }
   };

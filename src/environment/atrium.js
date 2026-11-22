@@ -367,7 +367,7 @@ function createCeilingStructure(parent) {
     ceilingGroup.add(ribMesh);
   }
 
-  // 3. Central Oculus ring & frosted glass skylight disc
+  // 3. Central Oculus ring & natural white light skylight disc
   const oculusRingGeo = new THREE.TorusGeometry(2.65, 0.16, 16, 64);
   const oculusMat = new THREE.MeshPhysicalMaterial({
     color: COLOR_ALUMINUM,
@@ -380,20 +380,36 @@ function createCeilingStructure(parent) {
   oculusRing.rotation.x = Math.PI / 2;
   ceilingGroup.add(oculusRing);
 
-  // Soft diffuse skylight disc
-  const discGeo = new THREE.CircleGeometry(2.55, 48);
+  // Natural white light skylight disc filling the central oculus opening
+  const discGeo = new THREE.CircleGeometry(2.58, 64);
   discGeo.rotateX(Math.PI / 2);
-  const discMat = new THREE.MeshPhysicalMaterial({
-    color: 0x0c1626,
-    transmission: 0.82,
-    roughness: 0.15,
-    ior: 1.48,
-    transparent: true,
-    opacity: 0.85,
+  const discMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
   });
   const disc = new THREE.Mesh(discGeo, discMat);
-  disc.position.set(0, ATRIUM_HEIGHT + 0.14, 0);
+  disc.position.set(0, ATRIUM_HEIGHT + 0.12, 0);
   ceilingGroup.add(disc);
+
+  // Soft architectural glow trim ring around the skylight
+  const glowRingGeo = new THREE.RingGeometry(2.42, 2.62, 64);
+  glowRingGeo.rotateX(Math.PI / 2);
+  const glowRingMat = new THREE.MeshBasicMaterial({
+    color: 0xf4f8ff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const glowRing = new THREE.Mesh(glowRingGeo, glowRingMat);
+  glowRing.position.set(0, ATRIUM_HEIGHT + 0.11, 0);
+  ceilingGroup.add(glowRing);
+
+  // Natural daylight illumination flooding down from the skylight into the atrium
+  const skylightDownLight = new THREE.SpotLight(0xfffdfa, 2.8, 24, Math.PI * 0.38, 0.5, 1.2);
+  skylightDownLight.position.set(0, ATRIUM_HEIGHT + 0.05, 0);
+  skylightDownLight.target.position.set(0, 0, 0);
+  ceilingGroup.add(skylightDownLight);
+  ceilingGroup.add(skylightDownLight.target);
 
   parent.add(ceilingGroup);
 }

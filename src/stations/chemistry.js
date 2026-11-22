@@ -261,11 +261,15 @@ export function buildChemistryStation(scene, globalUniforms) {
   burnerGroup.position.set(0, 0.88, 0);
   group.add(burnerGroup);
 
-  // Hexagonal heavy cast brass base
-  const burnerBaseGeo = new THREE.CylinderGeometry(0.24, 0.28, 0.07, 6);
-  const burnerBase = new THREE.Mesh(burnerBaseGeo, brassMat);
-  burnerBase.position.y = 0.035;
-  burnerBase.castShadow = true;
+  // Machined brass base collar anchoring burner to hearth ring
+  const burnerBaseMat = new THREE.MeshStandardMaterial({
+    color: 0xd4af37,
+    roughness: 0.42,
+    metalness: 0.72,
+  });
+  const burnerBase = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.05, 32), burnerBaseMat);
+  burnerBase.position.y = 0.025;
+  burnerBase.castShadow = false;
   burnerGroup.add(burnerBase);
 
   // Serrated side gas intake nozzle
@@ -342,22 +346,9 @@ export function buildChemistryStation(scene, globalUniforms) {
   const outerFlameMesh = new THREE.Mesh(outerFlameGeo, flameMaterial);
   flameGroup.add(outerFlameMesh);
 
-  // Inner reducing cone
-  const innerConeGeo = new THREE.ConeGeometry(0.046, 0.42, 32, 24, true);
-  innerConeGeo.translate(0, 0.21, 0);
-  const innerConeMat = new THREE.MeshBasicMaterial({
-    color: 0x00ffff,
-    transparent: true,
-    opacity: 0.95,
-    blending: THREE.AdditiveBlending,
-    side: THREE.FrontSide,
-    depthWrite: false,
-  });
-  const innerConeMesh = new THREE.Mesh(innerConeGeo, innerConeMat);
-  flameGroup.add(innerConeMesh);
 
-  // Dynamic point light simulating combustion emission (calibrated intensity)
-  const flameLight = new THREE.PointLight(0xffa000, 1.1, 4.5, 2.0);
+  // Dynamic point light simulating combustion emission (linear decay without d=0 singularity)
+  const flameLight = new THREE.PointLight(0xffa000, 0.72, 3.6, 1.0);
   flameLight.position.set(0, 0.45, 0);
   flameGroup.add(flameLight);
 
@@ -557,16 +548,6 @@ export function buildChemistryStation(scene, globalUniforms) {
   loopMesh.position.set(0.84, 0, 0);
   wand.add(loopMesh);
 
-  // Incandescent salt ember on loop tip
-  const saltEmberMat = new THREE.MeshBasicMaterial({
-    color: 0xffd600,
-    transparent: true,
-    opacity: 0.0,
-    blending: THREE.AdditiveBlending,
-  });
-  const saltEmber = new THREE.Mesh(new THREE.SphereGeometry(0.014, 16, 16), saltEmberMat);
-  saltEmber.position.set(0.84, 0, 0);
-  wand.add(saltEmber);
 
   // ════════════════════════════════════════════════════════════════════
   // 6. 3D HOLOGRAPHIC SPECTROSCOPE SCREEN (3% TRANSPARENCY, FACING HOME POD)
@@ -892,7 +873,6 @@ export function buildChemistryStation(scene, globalUniforms) {
   // Arm kinematics target positions
   let targetShoulderRotY = 0.0;
   let targetWandRotZ = 0.0;
-  let targetEmberOpacity = 1.0;
 
   /**
    * Sets the active test element and triggers physical arm motion & spectroscopy update.
@@ -910,7 +890,6 @@ export function buildChemistryStation(scene, globalUniforms) {
     targetIntensity = el.lightIntensity;
 
     sparkMat.color.setHex(el.outerColor);
-    saltEmberMat.color.setHex(el.outerColor);
     photonPulseMat.color.setHex(el.outerColor);
 
     renderSpectrumCanvas(key);
@@ -919,12 +898,10 @@ export function buildChemistryStation(scene, globalUniforms) {
     if (key === 'clean') {
       targetShoulderRotY = -0.85;
       targetWandRotZ = 0.30;
-      targetEmberOpacity = 0.0;
     } else {
       // Inoculate loop in flame
       targetShoulderRotY = 0.12;
       targetWandRotZ = -0.06;
-      targetEmberOpacity = 0.95;
     }
   };
 
@@ -965,17 +942,15 @@ export function buildChemistryStation(scene, globalUniforms) {
     flameUniforms.uColorOuter.value.lerp(effectiveOuter, dt * 6.0);
     flameUniforms.uColorInner.value.lerp(effectiveInner, dt * 6.0);
     flameUniforms.uColorTip.value.lerp(effectiveTip, dt * 6.0);
-    innerConeMat.color.lerp(effectiveInner, dt * 6.0);
 
-    // Light color & dynamic gentle flicker (clamped intensity)
+    // Light color & dynamic gentle flicker (calibrated intensity)
     flameLight.color.lerp(targetLightColor, dt * 6.0);
     const flicker = 0.97 + 0.03 * Math.sin(elapsed * 52.0) * Math.sin(elapsed * 67.0);
-    flameLight.intensity = targetIntensity * flicker * (0.85 + airMode * 0.25);
+    flameLight.intensity = targetIntensity * flicker * (0.62 + airMode * 0.18);
 
     // Animate robotic inoculation arm kinematics
     shoulder.rotation.y = THREE.MathUtils.lerp(shoulder.rotation.y, targetShoulderRotY, dt * 3.5);
     wand.rotation.z = THREE.MathUtils.lerp(wand.rotation.z, targetWandRotZ, dt * 3.5);
-    saltEmberMat.opacity = THREE.MathUtils.lerp(saltEmberMat.opacity, targetEmberOpacity, dt * 4.0);
 
     // Update rising incandescent sparkler particles
     const posArr = sparkGeo.attributes.position.array;

@@ -161,18 +161,23 @@ export function createFlameMaterial(globalUniforms, opts = {}) {
         float jitter = 0.96 + 0.04 * sin(uTime * 48.0) * sin(uTime * 64.0 + 1.3);
         col *= jitter * uFlicker * uIntensity;
 
-        // Soft Fresnel edge
-        float edgeGlow = pow(1.0 - abs(vNormal.z), 1.6) * 0.35;
+        // Soft Fresnel edge (strictly guarded against negative values to prevent NaN in pow)
+        float fresnelFactor = clamp(1.0 - abs(vNormal.z), 0.0, 1.0);
+        float edgeGlow = pow(fresnelFactor, 1.6) * 0.35;
         col += uColorOuter * edgeGlow;
 
-        // Clamp to strictly prevent bloom blowout / NaN overflow
-        col = clamp(col, 0.0, 1.85);
+        // Vertical alpha taper (guarded against negative y)
+        float safeY = clamp(y, 0.0, 1.0);
+        float alpha = radialAlpha * (1.0 - pow(safeY, 2.5)) * jitter;
+        alpha = clamp(alpha * 0.88, 0.0, 0.85);
 
-        // Vertical alpha taper
-        float alpha = radialAlpha * (1.0 - pow(y, 2.5)) * jitter;
-        alpha = clamp(alpha * 1.1, 0.0, 0.92);
+        // Clamp color to strictly prevent bloom blowout and post-processing buffer overflow
+        col = clamp(col, 0.0, 1.25);
 
-        if (alpha < 0.015) discard;
+        // Guard against any NaN or non-finite float
+        if (col.r != col.r || col.g != col.g || col.b != col.b || alpha != alpha || alpha < 0.015) {
+          discard;
+        }
 
         gl_FragColor = vec4(col, alpha);
       }

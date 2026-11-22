@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { createRenderer, createCamera, createComposer, handleResize } from './core/renderer.js';
 import { buildAtrium } from './environment/atrium.js';
 import { setupLighting } from './environment/lighting.js';
-import { setupControls, animateCamera } from './ui/controls.js';
+import { setupControls, animateCamera, enforceRoomBoundaries } from './ui/controls.js';
 import { initDeviceOrientation } from './ui/deviceOrientation.js';
 import { buildHUD } from './ui/hud.js';
 import { setupWebXR } from './ui/webxr.js';
@@ -125,7 +125,8 @@ async function init() {
   setTimeout(() => loadingScreen.remove(), 1000);
 
   // Expose for testing/debugging
-  window.__sim = { camera, controls, cameraAnim, scene, gyroManager, astroCtx, mobileRobots, rocketTelemetry, rocketExhibits, ambientAudio, audioWidget };
+  window.THREE = THREE;
+  window.__sim = { renderer, composer, camera, controls, cameraAnim, scene, gyroManager, astroCtx, mobileRobots, rocketTelemetry, rocketExhibits, ambientAudio, audioWidget };
 
   // ─── Render Loop ───
   const shaderTicks = registerShaderTick.getAll();
@@ -142,12 +143,20 @@ async function init() {
     raycaster.ray.intersectPlane(groundPlane, pointerTarget);
     if (pointerTarget) globalUniforms.uPointerWorld.value.copy(pointerTarget);
 
-    // Update gyro orientation on mobile/tablet devices, or OrbitControls when gyro is idle
-    if (gyroManager.enabled && gyroManager.hasSensorData) {
-      gyroManager.update(dt);
-    } else {
-      controls.update();
+    // Step camera animation during transitions
+    cameraAnim.update?.(dt);
+
+    // Update gyro orientation on mobile/tablet devices, or OrbitControls when not transitioning
+    if (!cameraAnim.isTransitioning) {
+      if (gyroManager.enabled && gyroManager.hasSensorData) {
+        gyroManager.update(dt);
+      } else {
+        controls.update();
+      }
     }
+
+    // Strict boundary enforcement: prevents camera or target from exiting walls, floor, or ceiling
+    enforceRoomBoundaries(camera, controls);
 
     // Tick all registered shader/vfx updaters
     for (const tick of shaderTicks) {

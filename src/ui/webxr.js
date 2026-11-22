@@ -1,20 +1,26 @@
-// src/ui/webxr.js — Native WebXR support (VR button displayed ONLY when VR hardware is supported)
+// src/ui/webxr.js — Native WebXR support (Desktop VR headsets only; excluded on mobile devices)
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { isMobileOrTablet } from './deviceOrientation.js';
 
 /**
  * Configures WebXR support on the renderer.
- * If VR is not supported on the current device, no 'VR NOT SUPPORTED' tag is shown.
+ * On mobile/tablet devices, VR mode is completely disabled per user requirement.
+ * On desktop, VR is only displayed if dedicated VR hardware is detected.
  * @param {THREE.WebGLRenderer} renderer
  */
 export function setupWebXR(renderer) {
+  // Completely exclude VR mode on mobile and tablet devices
+  if (isMobileOrTablet()) {
+    return;
+  }
+
   if (!('xr' in navigator)) {
     return;
   }
 
-  // Only create and display button if immersive-vr is actively supported
+  // Only create and display button on desktop if immersive-vr is actively supported
   navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-    if (!supported) {
-      // Per user request, do not display 'VR NOT SUPPORTED' badge
+    if (!supported || isMobileOrTablet()) {
       return;
     }
 
@@ -24,10 +30,12 @@ export function setupWebXR(renderer) {
 
       const button = VRButton.createButton(renderer);
       if (button) {
-        if (button.textContent.toUpperCase().includes('NOT SUPPORTED')) {
+        if (button.textContent.toUpperCase().includes('NOT SUPPORTED') || isMobileOrTablet()) {
           button.style.display = 'none';
           return;
         }
+
+        button.id = 'vz-vr-btn';
 
         // Style VR button with glassmorphic aesthetics
         button.style.position = 'fixed';

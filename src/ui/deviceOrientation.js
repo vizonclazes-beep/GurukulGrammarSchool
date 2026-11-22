@@ -1,4 +1,4 @@
-// src/ui/deviceOrientation.js — Mobile & Tablet Gyroscope / DeviceOrientation Controls for WebXR
+// src/ui/deviceOrientation.js — Mobile & Tablet Gyroscope / DeviceOrientation Controls
 import * as THREE from 'three';
 
 // Coordinate transform constants
@@ -17,7 +17,8 @@ export function isMobileOrTablet() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
   const touch = typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1;
-  return /Android|iPhone|iPad|iPod|Windows Phone|Mobile|Tablet/i.test(ua) || touch;
+  const isSmall = typeof window !== 'undefined' && window.innerWidth <= 900;
+  return /Android|iPhone|iPad|iPod|Windows Phone|Mobile|Tablet/i.test(ua) || (touch && isSmall);
 }
 
 /**
@@ -36,8 +37,8 @@ export function getScreenOrientation() {
 }
 
 /**
- * DeviceOrientationManager manages mobile gyroscope sensors, permission prompts,
- * smooth slerp quaternion updates, and touch-drag yaw panning.
+ * DeviceOrientationManager manages mobile gyroscope sensors, single-event stream binding,
+ * smooth shortest-arc quaternion slerp, stationary vantage point locking, and touch-drag yaw panning.
  */
 export class DeviceOrientationManager {
   /**
@@ -52,9 +53,10 @@ export class DeviceOrientationManager {
     this.hasSensorData = false;
     this.permissionGranted = false;
 
-    this.alpha = 0;
-    this.beta = 0;
-    this.gamma = 0;
+    // Filtered continuous sensor angles
+    this.rawAlpha = null;
+    this.rawBeta = 90;
+    this.rawGamma = 0;
     this.screenOrientation = 0;
 
     this.yawOffset = 0;
@@ -62,6 +64,8 @@ export class DeviceOrientationManager {
 
     this.targetQuat = new THREE.Quaternion();
     this.currentQuat = new THREE.Quaternion();
+
+    this._activeEventListener = null;
 
     // Bound event handlers
     this._onDeviceOrientation = this._onDeviceOrientation.bind(this);
@@ -122,22 +126,43 @@ export class DeviceOrientationManager {
   }
 
   _onDeviceOrientation(event) {
-    if (event.alpha === null || typeof event.alpha === 'undefined') return;
+    if (typeof event.alpha !== 'number') return;
 
-    this.alpha = event.alpha;
-    this.beta = event.beta || 0;
-    this.gamma = event.gamma || 0;
-    this.hasSensorData = true;
+    const inAlpha = event.alpha;
+    const inBeta = event.beta ?? 90;
+    const inGamma = event.gamma ?? 0;
 
-    // Calibrate initial heading on first valid sensor reading so user starts facing forward
-    if (!this.initialHeadingCalibrated) {
+    // Calibrate initial heading on first valid sensor reading so user starts seamlessly facing current view
+    if (!this.initialHeadingCalibrated || this.rawAlpha === null) {
       this.initialHeadingCalibrated = true;
-      // Calculate current camera yaw
+      this.rawAlpha = inAlpha;
+      this.rawBeta = inBeta;
+      this.rawGamma = inGamma;
+
+      // Calculate existing camera forward heading
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
       const currentCameraYaw = Math.atan2(-forward.x, -forward.z);
-      const deviceAlphaRad = THREE.MathUtils.degToRad(this.alpha);
+      const deviceAlphaRad = THREE.MathUtils.degToRad(inAlpha);
       this.yawOffset = currentCameraYaw - (Math.PI - deviceAlphaRad);
+      this.currentQuat.copy(this.camera.quaternion);
+      this.hasSensorData = true;
+
+      if (this._uiBtn && !this._uiBtn.classList.contains('active')) {
+        this._updateUIState(true);
+      }
+      return;
     }
+
+    // Shortest-distance circular smoothing on alpha (0..360) to eliminate boundary jitter
+    let dAlpha = (inAlpha - this.rawAlpha + 540) % 360 - 180;
+    this.rawAlpha = (this.rawAlpha + dAlpha * 0.40) % 360;
+    if (this.rawAlpha < 0) this.rawAlpha += 360;
+
+    // Exponential smoothing on pitch and roll
+    this.rawBeta += (inBeta - this.rawBeta) * 0.40;
+    this.rawGamma += (inGamma - this.rawGamma) * 0.40;
+
+    this.hasSensorData = true;
 
     if (this._uiBtn && !this._uiBtn.classList.contains('active')) {
       this._updateUIState(true);
@@ -178,10 +203,25 @@ export class DeviceOrientationManager {
     }
 
     this.enabled = true;
+    this.initialHeadingCalibrated = false; // Recalibrate smoothly to current view
 
-    // Try standard deviceorientation first, fallback to deviceorientationabsolute
-    window.addEventListener('deviceorientation', this._onDeviceOrientation, false);
-    window.addEventListener('deviceorientationabsolute', this._onDeviceOrientation, false);
+    // Completely disable OrbitControls while gyro is active so it never conflicts with orientation or jumps camera position
+    if (this.controls) {
+      this.controls.enabled = false;
+      this.controls.autoRotate = false;
+    }
+
+    // Unbind any previous listener first to ensure only a single stream is ever active
+    if (this._activeEventListener) {
+      window.removeEventListener(this._activeEventListener, this._onDeviceOrientation, false);
+      this._activeEventListener = null;
+    }
+
+    // Select ONE single event stream: if deviceorientationabsolute exists and works, use it; otherwise standard deviceorientation
+    // NEVER bind both at the same time to avoid alternating 180-degree flip oscillations between relative and absolute north!
+    const useAbsolute = ('ondeviceorientationabsolute' in window);
+    this._activeEventListener = useAbsolute ? 'deviceorientationabsolute' : 'deviceorientation';
+    window.addEventListener(this._activeEventListener, this._onDeviceOrientation, false);
 
     this._updateUIState(true);
     return true;
@@ -192,8 +232,21 @@ export class DeviceOrientationManager {
    */
   disable() {
     this.enabled = false;
-    window.removeEventListener('deviceorientation', this._onDeviceOrientation, false);
-    window.removeEventListener('deviceorientationabsolute', this._onDeviceOrientation, false);
+    this.hasSensorData = false;
+
+    if (this._activeEventListener) {
+      window.removeEventListener(this._activeEventListener, this._onDeviceOrientation, false);
+      this._activeEventListener = null;
+    }
+
+    // Smoothly restore OrbitControls facing the direction the user was looking
+    if (this.controls) {
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      this.controls.target.copy(this.camera.position).addScaledVector(forward, 5.0);
+      this.controls.enabled = true;
+      this.controls.update();
+    }
+
     this._updateUIState(false);
   }
 
@@ -211,36 +264,42 @@ export class DeviceOrientationManager {
   /**
    * Per-frame update called in the render loop.
    * Smoothly interpolates the camera rotation based on device orientation.
+   * Keeps camera position strictly stationary at current vantage point.
    * @param {number} dt Delta time in seconds
    */
   update(dt = 0.016) {
-    if (!this.enabled || !this.hasSensorData) return;
+    if (!this.enabled || !this.hasSensorData || this.rawAlpha === null) return;
 
-    const alphaRad = THREE.MathUtils.degToRad(this.alpha);
-    const betaRad = THREE.MathUtils.degToRad(this.beta);
-    const gammaRad = THREE.MathUtils.degToRad(this.gamma);
+    const alphaRad = THREE.MathUtils.degToRad(this.rawAlpha);
+    const betaRad = THREE.MathUtils.degToRad(this.rawBeta);
+    const gammaRad = THREE.MathUtils.degToRad(this.rawGamma);
     const orientRad = THREE.MathUtils.degToRad(this.screenOrientation);
 
-    // Standard W3C camera rotation transform
+    // Standard camera rotation transform
     euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
     this.targetQuat.setFromEuler(euler);
     this.targetQuat.multiply(q1); // Camera looks out back of phone
     this.targetQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation
 
-    // Apply horizontal yaw offset
+    // Apply horizontal yaw offset from initial calibration & touch swipe panning
     if (this.yawOffset !== 0) {
       qYaw.setFromAxisAngle(up, this.yawOffset);
       this.targetQuat.premultiply(qYaw);
     }
 
+    // Ensure shortest-arc on quaternion slerp (prevents 180-degree sign flip spin)
+    if (this.camera.quaternion.dot(this.targetQuat) < 0) {
+      this.targetQuat.x = -this.targetQuat.x;
+      this.targetQuat.y = -this.targetQuat.y;
+      this.targetQuat.z = -this.targetQuat.z;
+      this.targetQuat.w = -this.targetQuat.w;
+    }
+
     // Smooth slerp to eliminate sensor jitter
-    const slerpFactor = Math.min(1.0, dt * 22);
+    const slerpFactor = Math.min(1.0, dt * 18.0);
     this.camera.quaternion.slerp(this.targetQuat, slerpFactor);
 
-    // Update OrbitControls target vector so that when switching between gyro and orbit,
-    // the target remains 6 meters directly in front of the camera's gaze
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    this.controls.target.copy(this.camera.position).addScaledVector(forward, 6);
+    // Notice: camera.position is NEVER modified by gyro, preventing forward/backward jumping!
   }
 
   _injectStyles() {

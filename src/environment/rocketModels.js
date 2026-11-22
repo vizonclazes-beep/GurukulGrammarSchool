@@ -592,7 +592,7 @@ export function buildRocketExhibits(scene, telemetry, camera) {
 
     pCtx.fillStyle = '#64748b';
     pCtx.font = 'italic 16px "Inter", sans-serif';
-    pCtx.fillText('TOUCH TO VIEW TELEMETRY & SPECIFICATIONS ➜', 36, 152);
+    pCtx.fillText('TOUCH TO VIEW TELEMETRY ➜', 36, 152);
 
     const pTex = new THREE.CanvasTexture(pCanvas);
     const pMesh = new THREE.Mesh(
@@ -743,6 +743,11 @@ export function buildRocketExhibits(scene, telemetry, camera) {
     }
   });
 
+  // Add 3D telemetry card to interactive targets for instant tap-to-dismiss
+  if (telemetry.cardMesh) {
+    interactiveTargets.push(telemetry.cardMesh);
+  }
+
   // ── 3. INTERACTIVE RAYCASTING TOUCH & CLICK HANDLER ──
   let pointerDownPos = { x: 0, y: 0, time: 0 };
 
@@ -774,9 +779,26 @@ export function buildRocketExhibits(scene, telemetry, camera) {
     const hits = raycaster.intersectObjects(interactiveTargets, true);
     if (hits.length > 0) {
       const hitObj = hits[0].object;
+
+      // If user tapped directly on the 3D telemetry card, dismiss it
+      if (hitObj.userData?.isCardMesh || hitObj.userData?.isRocketCard) {
+        telemetry.deselect();
+        return;
+      }
+
       const rocketId = hitObj.userData?.rocketId || hitObj.parent?.userData?.rocketId;
       if (rocketId && ROCKET_DATA[rocketId]) {
-        telemetry.selectRocket(hitObj, rocketId);
+        if (telemetry.getActiveRocket && telemetry.getActiveRocket()?.id === rocketId) {
+          // Toggle off if already selected
+          telemetry.deselect();
+        } else {
+          telemetry.selectRocket(hitObj, rocketId);
+        }
+      }
+    } else {
+      // Tap outside / empty space deselects active rocket telemetry
+      if (telemetry.getActiveRocket && telemetry.getActiveRocket()) {
+        telemetry.deselect();
       }
     }
   };

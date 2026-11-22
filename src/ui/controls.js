@@ -1,7 +1,6 @@
-// src/ui/controls.js — OrbitControls configuration & GSAP camera transitions
+// src/ui/controls.js — OrbitControls configuration & camera transitions
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import gsap from 'gsap';
 import {
   SPAWN_POSITION,
   SPAWN_TARGET,
@@ -28,9 +27,10 @@ export function setupControls(camera, renderer) {
   controls.dampingFactor = 0.08;
 
   // ── Constraints ──
-  controls.minDistance = 3;
-  controls.maxDistance = 35;
-  controls.maxPolarAngle = Math.PI * 0.48; // prevent going below floor
+  controls.minDistance = 0.5;
+  controls.maxDistance = 14.5;
+  controls.maxPolarAngle = Math.PI * 0.465; // prevent going below floor
+  controls.minPolarAngle = 0.08; // prevent flipping through ceiling
 
   // ── Initial target ──
   controls.target.copy(SPAWN_TARGET);
@@ -108,59 +108,71 @@ function computeStationView(stationKey) {
  * Returns an animation controller with:
  *   - transitionTo(stationKey) — animate camera to a station
  *   - transitionToSpawn()      — animate camera back to spawn
+ *   - update(dt)               — per-frame camera flight step
  *
  * @param {THREE.PerspectiveCamera} camera
  * @param {OrbitControls}           controls
- * @returns {{ transitionTo: (key: string) => void, transitionToSpawn: () => void }}
  */
 export function animateCamera(camera, controls) {
-  let activeTween = null;
+  let activeTransition = null;
   let activeStation = null;
 
   // Listeners that should be notified when station changes
   const listeners = [];
 
+  function _easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
   /**
    * Internal transition helper.
    * Animates camera.position → targetPos, controls.target → lookAt
-   * over 2 s with power2.inOut easing.
+   * over duration seconds with smooth cubic in-out easing.
    */
-  function _transition(targetPos, lookAt, stationKey) {
-    if (activeTween) {
-      activeTween.kill();
-      activeTween = null;
-    }
-
-    // Disable damping during tween so GSAP has full precision
+  function _transition(targetPos, lookAt, stationKey, duration = 1.4) {
+    // Disable controls during transition so OrbitControls does not fight camera motion
+    controls.enabled = false;
     controls.enableDamping = false;
     controls.autoRotate = false;
 
-    const tl = gsap.timeline({
-      defaults: { duration: 1.4, ease: 'power2.inOut' },
-      onComplete: () => {
-        camera.position.copy(targetPos);
-        controls.target.copy(lookAt);
-        controls.enableDamping = true;
-        controls.update();
-        activeTween = null;
-        activeStation = stationKey;
-        for (const fn of listeners) fn(stationKey);
-      },
-    });
+    activeTransition = {
+      startPos: camera.position.clone(),
+      targetPos: targetPos.clone(),
+      startTarget: controls.target.clone(),
+      lookAt: lookAt.clone(),
+      stationKey,
+      elapsed: 0,
+      duration,
+    };
+  }
 
-    tl.to(camera.position, {
-      x: targetPos.x,
-      y: targetPos.y,
-      z: targetPos.z,
-    }, 0);
+  /**
+   * Per-frame update method called from renderer animation loop.
+   * @param {number} dt — frame delta in seconds
+   */
+  function update(dt) {
+    if (!activeTransition) return;
 
-    tl.to(controls.target, {
-      x: lookAt.x,
-      y: lookAt.y,
-      z: lookAt.z,
-    }, 0);
+    activeTransition.elapsed += dt;
+    const progress = Math.min(activeTransition.elapsed / activeTransition.duration, 1.0);
+    const ease = _easeInOutCubic(progress);
 
-    activeTween = tl;
+    camera.position.lerpVectors(activeTransition.startPos, activeTransition.targetPos, ease);
+    controls.target.lerpVectors(activeTransition.startTarget, activeTransition.lookAt, ease);
+    camera.lookAt(controls.target);
+
+    if (progress >= 1.0) {
+      const { targetPos, lookAt, stationKey } = activeTransition;
+      camera.position.copy(targetPos);
+      controls.target.copy(lookAt);
+      controls.enabled = true;
+      controls.enableDamping = true;
+      controls.update();
+
+      activeTransition = null;
+      activeStation = stationKey;
+      for (const fn of listeners) fn(stationKey);
+    }
   }
 
   /**
@@ -171,12 +183,11 @@ export function animateCamera(camera, controls) {
   function transitionTo(stationKey, instant = false) {
     const { cameraPos, lookTarget } = computeStationView(stationKey);
     if (instant) {
-      if (activeTween) {
-        activeTween.kill();
-        activeTween = null;
-      }
+      activeTransition = null;
       camera.position.copy(cameraPos);
       controls.target.copy(lookTarget);
+      controls.enabled = true;
+      controls.enableDamping = true;
       controls.update();
       activeStation = stationKey;
       for (const fn of listeners) fn(stationKey);
@@ -191,12 +202,11 @@ export function animateCamera(camera, controls) {
    */
   function transitionToSpawn(instant = false) {
     if (instant) {
-      if (activeTween) {
-        activeTween.kill();
-        activeTween = null;
-      }
+      activeTransition = null;
       camera.position.copy(SPAWN_POSITION);
       controls.target.copy(SPAWN_TARGET);
+      controls.enabled = true;
+      controls.enableDamping = true;
       controls.update();
       activeStation = null;
       for (const fn of listeners) fn(null);
@@ -212,13 +222,54 @@ export function animateCamera(camera, controls) {
   return {
     transitionTo,
     transitionToSpawn,
+    update,
     /** Register a callback fired when a transition completes. fn(stationKey|null) */
     onStationChange(fn) {
       listeners.push(fn);
+    },
+    /** Whether a camera transition is currently in progress */
+    get isTransitioning() {
+      return activeTransition !== null;
     },
     /** Currently active station key (null = spawn) */
     get activeStation() {
       return activeStation;
     },
   };
+}
+
+/**
+ * Strict physical boundary clamping: clamps camera and controls target
+ * strictly within the atrium cylinder [radius <= 16.2, floor >= 0.6, ceiling <= 11.2].
+ * User can NEVER escape the walls, floor, or ceiling on mobile or desktop.
+ * @param {THREE.PerspectiveCamera} camera
+ * @param {OrbitControls} controls
+ */
+export function enforceRoomBoundaries(camera, controls) {
+  const MAX_RADIUS = 16.2; // Atrium wall radius is 18; keeps camera safely inside perimeter walls and exhibits
+  const MIN_Y = 0.6;       // Floor eye-height barrier (floor is at Y = 0)
+  const MAX_Y = 11.2;      // Ceiling dome barrier (apex is at Y = 12)
+
+  // 1. Clamp camera horizontal radial distance from atrium center
+  const camR = Math.hypot(camera.position.x, camera.position.z);
+  if (camR > MAX_RADIUS) {
+    const scale = MAX_RADIUS / camR;
+    camera.position.x *= scale;
+    camera.position.z *= scale;
+  }
+
+  // 2. Clamp camera vertical height between floor and ceiling
+  camera.position.y = Math.max(MIN_Y, Math.min(MAX_Y, camera.position.y));
+
+  // 3. Clamp controls look target inside atrium so camera never flips to outside
+  if (controls && controls.target) {
+    const TARGET_MAX_R = 15.0;
+    const tr = Math.hypot(controls.target.x, controls.target.z);
+    if (tr > TARGET_MAX_R) {
+      const tScale = TARGET_MAX_R / tr;
+      controls.target.x *= tScale;
+      controls.target.z *= tScale;
+    }
+    controls.target.y = Math.max(0.3, Math.min(9.5, controls.target.y));
+  }
 }

@@ -295,9 +295,11 @@ export const ROCKET_DATA = {
 
 /**
  * Creates and manages the interactive 3D Holographic Telemetry Card and 2D HUD Drawer for rockets.
+ * In desktop mode: provides both the 3D card beside the rocket and the 2D scientific telemetry drawer.
+ * In mobile mode: suppresses the 2D drawer popup list; telemetry data is displayed only along the rocket.
  * @param {THREE.Group} parentGroup
  * @param {THREE.Camera} camera
- * @returns {{ selectRocket: Function, update: Function, deselect: Function }}
+ * @returns {{ selectRocket: Function, update: Function, deselect: Function, getActiveRocket: Function, cardMesh: THREE.Mesh }}
  */
 export function createRocketTelemetry(parentGroup, camera) {
   const telemetryGroup = new THREE.Group();
@@ -306,18 +308,28 @@ export function createRocketTelemetry(parentGroup, camera) {
 
   let activeRocket = null;
   let activeMesh = null;
+  const baseCardPos = new THREE.Vector3();
 
-  // 1. 3D Floating Holographic Card
+  // Helper to detect mobile mode (viewports <= 768px or mobile/touch devices)
+  function isMobileMode() {
+    return (
+      window.innerWidth <= 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      ('ontouchstart' in window && window.innerWidth <= 1024)
+    );
+  }
+
+  // 1. 3D Floating Holographic Card (High-Definition 1024x640 Canvas)
   const canvas = document.createElement('canvas');
-  canvas.width = 768;
-  canvas.height = 420;
+  canvas.width = 1024;
+  canvas.height = 640;
   const ctx = canvas.getContext('2d');
 
   const cardTexture = new THREE.CanvasTexture(canvas);
   cardTexture.minFilter = THREE.LinearFilter;
   cardTexture.magFilter = THREE.LinearFilter;
 
-  const cardGeo = new THREE.PlaneGeometry(1.5, 0.82);
+  const cardGeo = new THREE.PlaneGeometry(1.80, 1.125);
   const cardMat = new THREE.MeshBasicMaterial({
     map: cardTexture,
     transparent: true,
@@ -326,6 +338,8 @@ export function createRocketTelemetry(parentGroup, camera) {
   });
 
   const cardMesh = new THREE.Mesh(cardGeo, cardMat);
+  cardMesh.name = 'Rocket3DTelemetryCard';
+  cardMesh.userData = { isCardMesh: true, isRocketCard: true };
   cardMesh.visible = false;
   telemetryGroup.add(cardMesh);
 
@@ -337,20 +351,26 @@ export function createRocketTelemetry(parentGroup, camera) {
   const lineMat = new THREE.LineBasicMaterial({
     color: 0x00e5ff,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.85,
   });
   const leaderLine = new THREE.Line(lineGeo, lineMat);
   leaderLine.visible = false;
   telemetryGroup.add(leaderLine);
 
+  const reticleMat = new THREE.MeshBasicMaterial({
+    color: 0x00e5ff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.85,
+  });
   const reticleRing = new THREE.Mesh(
-    new THREE.RingGeometry(0.08, 0.10, 32),
-    new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    new THREE.RingGeometry(0.08, 0.11, 32),
+    reticleMat
   );
   reticleRing.visible = false;
   telemetryGroup.add(reticleRing);
 
-  // 2. 2D Glassmorphic HUD Drawer
+  // 2. 2D Glassmorphic HUD Drawer (Used for Desktop Mode; Suppressed on Mobile)
   let hudContainer = document.getElementById('rocket-telemetry-hud');
   if (!hudContainer) {
     hudContainer = document.createElement('div');
@@ -360,7 +380,7 @@ export function createRocketTelemetry(parentGroup, camera) {
         #rocket-telemetry-hud {
           position: fixed;
           bottom: 24px;
-          right: -480px;
+          right: -520px;
           width: 440px;
           max-width: calc(100vw - 32px);
           max-height: 82vh;
@@ -383,6 +403,13 @@ export function createRocketTelemetry(parentGroup, camera) {
         #rocket-telemetry-hud.active {
           right: 24px;
           opacity: 1;
+        }
+        /* Completely suppress 2D popup drawer list on mobile devices */
+        @media (max-width: 768px) {
+          #rocket-telemetry-hud {
+            display: none !important;
+            pointer-events: none !important;
+          }
         }
         .rkt-header {
           display: flex;
@@ -493,17 +520,6 @@ export function createRocketTelemetry(parentGroup, camera) {
           border-left: 3px solid #fbbf24;
           margin-bottom: 14px;
         }
-        @media (max-width: 600px) {
-          #rocket-telemetry-hud {
-            width: calc(100vw - 24px);
-            bottom: 12px;
-            right: -100vw;
-            padding: 16px 18px;
-          }
-          #rocket-telemetry-hud.active {
-            right: 12px;
-          }
-        }
       </style>
       <div class="rkt-header">
         <div class="rkt-title-area">
@@ -554,26 +570,54 @@ export function createRocketTelemetry(parentGroup, camera) {
     `;
     document.body.appendChild(hudContainer);
 
-    document.getElementById('rkt-close-btn').addEventListener('click', () => {
+    document.getElementById('rkt-close-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
       deselect();
     });
   }
 
-  function render3DCard(data) {
-    ctx.clearRect(0, 0, 768, 420);
+  function wrapText(context, text, x, y, maxWidth, lineHeight, maxLines = 4) {
+    if (!text) return y;
+    const words = text.split(' ');
+    let line = '';
+    let count = 0;
 
-    // Dark glassmorphic backdrop
-    ctx.fillStyle = 'rgba(8, 12, 22, 0.92)';
-    ctx.fillRect(0, 0, 768, 420);
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = context.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        count++;
+        if (count >= maxLines) {
+          context.fillText(line.trim() + '...', x, y);
+          return y + lineHeight;
+        }
+        context.fillText(line, x, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    context.fillText(line, x, y);
+    return y + lineHeight;
+  }
+
+  function render3DCard(data) {
+    ctx.clearRect(0, 0, 1024, 640);
+
+    // Deep glassmorphic dark backdrop
+    ctx.fillStyle = 'rgba(7, 11, 20, 0.94)';
+    ctx.fillRect(0, 0, 1024, 640);
 
     // Neon border
     ctx.strokeStyle = data.accentColor;
     ctx.lineWidth = 3;
-    ctx.strokeRect(4, 4, 760, 412);
+    ctx.strokeRect(4, 4, 1016, 632);
 
     // Corner tech crosshairs
-    const sz = 16;
+    const sz = 20;
     ctx.lineWidth = 4;
+    ctx.strokeStyle = data.accentColor;
     // Top-left
     ctx.beginPath();
     ctx.moveTo(4, 4 + sz);
@@ -582,59 +626,178 @@ export function createRocketTelemetry(parentGroup, camera) {
     ctx.stroke();
     // Top-right
     ctx.beginPath();
-    ctx.moveTo(764 - sz, 4);
-    ctx.lineTo(764, 4);
-    ctx.lineTo(764, 4 + sz);
+    ctx.moveTo(1020 - sz, 4);
+    ctx.lineTo(1020, 4);
+    ctx.lineTo(1020, 4 + sz);
+    ctx.stroke();
+    // Bottom-left
+    ctx.beginPath();
+    ctx.moveTo(4, 636 - sz);
+    ctx.lineTo(4, 636);
+    ctx.lineTo(4 + sz, 636);
+    ctx.stroke();
+    // Bottom-right
+    ctx.beginPath();
+    ctx.moveTo(1020 - sz, 636);
+    ctx.lineTo(1020, 636);
+    ctx.lineTo(1020, 636 - sz);
     ctx.stroke();
 
-    // Top Header Banner
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(4, 4, 760, 60);
-
+    // ── 1. Top Header Banner ──
     ctx.fillStyle = data.accentColor;
-    ctx.fillRect(4, 62, 760, 2);
+    ctx.fillRect(4, 4, 1016, 52);
 
-    // Title
-    ctx.font = '900 32px "Inter", sans-serif';
-    ctx.fillStyle = '#ffffff';
+    // Status Pill & Close in Header first to measure exact width
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 14px "Inter", monospace';
+    const statusText = `● [${data.status}]  ✕`;
+    const statusW = ctx.measureText(statusText).width;
+    ctx.fillStyle = '#0a0e1c';
+    ctx.fillText(statusText, 1000, 30);
+
+    // Title clipped so it never collides with status pill
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(data.name, 24, 34);
+    ctx.font = '900 21px "Inter", "Segoe UI", sans-serif';
+    ctx.fillStyle = '#0a0e1c';
 
-    // Status Pill
-    ctx.textAlign = 'right';
-    ctx.fillStyle = data.statusColor;
-    ctx.font = 'bold 15px "Inter", monospace';
-    ctx.fillText(`● [${data.status}]`, 744, 34);
+    let titleStr = `★ ${data.name}`;
+    if (data.fullName && data.fullName !== data.name) {
+      titleStr += ` — ${data.fullName}`;
+    }
+    const maxTitleW = 1000 - statusW - 44;
+    if (ctx.measureText(titleStr).width > maxTitleW) {
+      while (ctx.measureText(titleStr + '…').width > maxTitleW && titleStr.length > 8) {
+        titleStr = titleStr.slice(0, -1);
+      }
+      titleStr = titleStr.trim() + '…';
+    }
+    ctx.fillText(titleStr, 24, 30);
 
-    // Subtitle
+    // ── 2. Sub-header ──
     ctx.textAlign = 'left';
-    ctx.font = 'bold 16px "Inter", monospace';
-    ctx.fillStyle = data.accentColor;
-    ctx.fillText(data.fullName, 24, 94);
-
-    ctx.font = '14px "Inter", monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = 'bold 14px "Inter", monospace';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText(`OPERATOR: ${data.operator}`, 24, 124);
+    ctx.fillText(`OPERATOR: ${data.operator}   |   CATEGORY: ${data.category}`, 24, 82);
 
-    // Key stats
-    ctx.font = 'bold 15px "Inter", sans-serif';
+    // ── 3. Specifications 2-Column Grid ──
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.fillRect(20, 96, 984, 126);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(20, 96, 984, 126);
+
+    const col1X = 36;
+    const col2X = 520;
+
+    // Col 1
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('HEIGHT:', col1X, 120);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.height, col1X + 130, 120);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('DIAMETER:', col1X, 148);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.diameter, col1X + 130, 148);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('LIFTOFF MASS:', col1X, 176);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.liftOffMass, col1X + 130, 176);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('STAGES:', col1X, 204);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.stages, col1X + 130, 204);
+
+    // Col 2
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('LEO / POLAR:', col2X, 120);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.payloadLeo, col2X + 120, 120);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('GTO / TLI:', col2X, 148);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(data.payloadGto, col2X + 120, 148);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('FIRST FLIGHT:', col2X, 176);
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.fillStyle = '#ffffff';
+
+    let flightStr = data.firstFlight;
+    const maxFlightW = 350;
+    if (ctx.measureText(flightStr).width > maxFlightW) {
+      while (ctx.measureText(flightStr + '…').width > maxFlightW && flightStr.length > 5) {
+        flightStr = flightStr.slice(0, -1);
+      }
+      flightStr = flightStr.trim() + '…';
+    }
+    ctx.fillText(flightStr, col2X + 120, 176);
+
+    // ── 4. Propulsion Architecture Box ──
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.04)';
+    ctx.fillRect(20, 230, 984, 106);
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.22)';
+    ctx.strokeRect(20, 230, 984, 106);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillText('PROPULSION ARCHITECTURE', 36, 250);
+
+    ctx.font = '13px "Inter", sans-serif';
     ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(`HEIGHT: ${data.height}`, 24, 160);
-    ctx.fillText(`DIAMETER: ${data.diameter}`, 24, 190);
-    ctx.fillText(`MASS: ${data.liftOffMass}`, 24, 220);
-    ctx.fillText(`STAGES: ${data.stages}`, 24, 250);
+    wrapText(ctx, data.propulsion, 36, 272, 952, 20, 3);
 
-    // Payload stats
-    ctx.fillStyle = data.accentColor;
-    ctx.fillText(`LEO / POLAR: ${data.payloadLeo}`, 24, 290);
-    ctx.fillStyle = '#f8fafc';
-    ctx.fillText(`GTO / TLI: ${data.payloadGto}`, 24, 320);
+    // ── 5. Flight Heritage & Key Missions Box ──
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.05)';
+    ctx.fillRect(20, 344, 984, 106);
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
+    ctx.strokeRect(20, 344, 984, 106);
 
-    // Footer
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#fbbf24';
+    ctx.fillText('FLIGHT HERITAGE & FAMOUS MISSIONS', 36, 364);
+
+    ctx.font = '13px "Inter", sans-serif';
+    ctx.fillStyle = '#fef08a';
+    wrapText(ctx, data.famousMissions, 36, 386, 952, 20, 3);
+
+    // ── 6. Engineering Overview / Description Box ──
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.04)';
+    ctx.fillRect(20, 458, 984, 138);
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+    ctx.strokeRect(20, 458, 984, 138);
+
+    ctx.font = 'bold 12px "Inter", monospace';
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText('AEROSPACE ENGINEERING OVERVIEW', 36, 478);
+
     ctx.font = 'italic 13px "Inter", sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    wrapText(ctx, data.description, 36, 500, 952, 20, 4);
+
+    // ── 7. Footer Prompt ──
+    ctx.font = 'bold 12px "Inter", monospace';
     ctx.fillStyle = '#64748b';
-    ctx.fillText('CLICK MODEL TO VIEW COMPLETE SPECIFICATIONS DRAWER ➜', 24, 380);
+    ctx.textAlign = 'center';
+    ctx.fillText('✕ TOUCH CARD, ROCKET OR EMPTY SPACE TO CLOSE TELEMETRY', 512, 622);
 
     cardTexture.needsUpdate = true;
   }
@@ -649,57 +812,81 @@ export function createRocketTelemetry(parentGroup, camera) {
     // Render 3D card
     render3DCard(data);
 
-    // Position 3D card
+    // Position 3D card directly beside/in front of the rocket toward the atrium center
     const worldPos = new THREE.Vector3();
     mesh.getWorldPosition(worldPos);
 
-    // Position 3D card directly in front of the rocket toward the atrium center
+    // Vector from rocket towards the center of the atrium
     const toCenter = new THREE.Vector3(-worldPos.x, 0, -worldPos.z).normalize();
-    // Offset card forward towards the visitor at comfortable eye-level
+    // Perpendicular vector along podium circumference
     const perp = new THREE.Vector3(-toCenter.z, 0, toCenter.x);
+
+    // Position card slightly forward and to the side at comfortable visitor eye-level
     const cardPos = worldPos
       .clone()
-      .add(toCenter.clone().multiplyScalar(1.25))
+      .add(toCenter.clone().multiplyScalar(1.20))
       .add(perp.clone().multiplyScalar(0.70))
-      .add(new THREE.Vector3(0, 2.30, 0));
+      .add(new THREE.Vector3(0, 1.85, 0));
 
+    baseCardPos.copy(cardPos);
     cardMesh.position.copy(cardPos);
     cardMesh.visible = true;
 
     // Position reticle ring at rocket mid-stage body
-    reticleRing.position.copy(worldPos).add(new THREE.Vector3(0, 2.10, 0));
+    reticleRing.position.copy(worldPos).add(new THREE.Vector3(0, 1.85, 0));
     reticleRing.visible = true;
 
     // Line from reticle to card
     const pts = [reticleRing.position.clone(), cardMesh.position.clone()];
     leaderLine.geometry.setFromPoints(pts);
+    lineMat.color.set(data.accentColor);
+    reticleMat.color.set(data.accentColor);
     leaderLine.visible = true;
 
-    // Update 2D HUD Drawer
-    document.getElementById('rkt-title').textContent = data.name;
-    document.getElementById('rkt-sub').textContent = `${data.fullName} // ${data.operator}`;
-    document.getElementById('rkt-height').textContent = data.height;
-    document.getElementById('rkt-diameter').textContent = data.diameter;
-    document.getElementById('rkt-mass').textContent = data.liftOffMass;
-    document.getElementById('rkt-stages').textContent = data.stages;
-    document.getElementById('rkt-payload-leo').textContent = data.payloadLeo;
-    document.getElementById('rkt-payload-gto').textContent = data.payloadGto;
-    document.getElementById('rkt-propulsion').textContent = data.propulsion;
-    document.getElementById('rkt-missions').textContent = data.famousMissions;
-    document.getElementById('rkt-description').textContent = data.description;
+    // Desktop Mode: Show rich 2D telemetry data drawer list
+    if (!isMobileMode()) {
+      const titleEl = document.getElementById('rkt-title');
+      const subEl = document.getElementById('rkt-sub');
+      const heightEl = document.getElementById('rkt-height');
+      const diaEl = document.getElementById('rkt-diameter');
+      const massEl = document.getElementById('rkt-mass');
+      const stagesEl = document.getElementById('rkt-stages');
+      const leoEl = document.getElementById('rkt-payload-leo');
+      const gtoEl = document.getElementById('rkt-payload-gto');
+      const propEl = document.getElementById('rkt-propulsion');
+      const missEl = document.getElementById('rkt-missions');
+      const descEl = document.getElementById('rkt-description');
 
-    const badgeContainer = document.getElementById('rkt-badge-container');
-    badgeContainer.innerHTML = `
-      <span class="rkt-badge" style="background: ${data.statusColor}22; color: ${data.statusColor}; border: 1px solid ${data.statusColor}66;">
-        ● ${data.status}
-      </span>
-      <span class="rkt-badge" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); margin-left: 6px;">
-        ${data.category}
-      </span>
-    `;
+      if (titleEl) titleEl.textContent = data.name;
+      if (subEl) subEl.textContent = `${data.fullName} // ${data.operator}`;
+      if (heightEl) heightEl.textContent = data.height;
+      if (diaEl) diaEl.textContent = data.diameter;
+      if (massEl) massEl.textContent = data.liftOffMass;
+      if (stagesEl) stagesEl.textContent = data.stages;
+      if (leoEl) leoEl.textContent = data.payloadLeo;
+      if (gtoEl) gtoEl.textContent = data.payloadGto;
+      if (propEl) propEl.textContent = data.propulsion;
+      if (missEl) missEl.textContent = data.famousMissions;
+      if (descEl) descEl.textContent = data.description;
 
-    hudContainer.style.borderLeftColor = data.accentColor;
-    hudContainer.classList.add('active');
+      const badgeContainer = document.getElementById('rkt-badge-container');
+      if (badgeContainer) {
+        badgeContainer.innerHTML = `
+          <span class="rkt-badge" style="background: ${data.statusColor}22; color: ${data.statusColor}; border: 1px solid ${data.statusColor}66;">
+            ● ${data.status}
+          </span>
+          <span class="rkt-badge" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); margin-left: 6px;">
+            ${data.category}
+          </span>
+        `;
+      }
+
+      hudContainer.style.borderLeftColor = data.accentColor;
+      hudContainer.classList.add('active');
+    } else {
+      // Mobile Mode: Ensure 2D popup drawer list is not active
+      hudContainer.classList.remove('active');
+    }
   }
 
   function deselect() {
@@ -708,18 +895,24 @@ export function createRocketTelemetry(parentGroup, camera) {
     cardMesh.visible = false;
     leaderLine.visible = false;
     reticleRing.visible = false;
-    hudContainer.classList.remove('active');
+    if (hudContainer) {
+      hudContainer.classList.remove('active');
+    }
   }
 
   function update(elapsed, dt) {
     if (!activeRocket || !cardMesh.visible || !camera) return;
 
-    // Ensure 3D card always faces the active camera
-    cardMesh.lookAt(camera.position);
-    reticleRing.lookAt(camera.position);
+    // Make 3D card and reticle face the active camera
+    cardMesh.quaternion.copy(camera.quaternion);
+    reticleRing.quaternion.copy(camera.quaternion);
 
-    // Subtle gentle float
-    cardMesh.position.y += Math.sin(elapsed * 2.5) * 0.001;
+    // Subtle gentle float without drift
+    cardMesh.position.y = baseCardPos.y + Math.sin(elapsed * 2.0) * 0.03;
+
+    // Update line connecting rocket reticle to card
+    const pts = [reticleRing.position.clone(), cardMesh.position.clone()];
+    leaderLine.geometry.setFromPoints(pts);
 
     // Pulse reticle ring
     const scale = 1.0 + Math.sin(elapsed * 4.0) * 0.08;
@@ -731,5 +924,6 @@ export function createRocketTelemetry(parentGroup, camera) {
     deselect,
     update,
     getActiveRocket: () => activeRocket,
+    cardMesh,
   };
 }
