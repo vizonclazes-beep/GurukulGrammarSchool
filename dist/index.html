@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>VIZON — Next-Gen Science Simulator</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%230a0e1a' stroke='%2300e5ff' stroke-width='6'/><circle cx='50' cy='50' r='18' fill='%237c4dff'/></svg>" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
+    canvas { display: block; width: 100%; height: 100%; }
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at center, #0a0e1a 0%, #000 100%);
+      transition: opacity 0.8s ease-out;
+    }
+    #loading-screen.fade-out { opacity: 0; pointer-events: none; }
+    #loading-screen h1 {
+      font-size: clamp(1.6rem, 4vw, 3rem); font-weight: 200;
+      color: #e0e8ff; letter-spacing: 0.4em; text-transform: uppercase;
+      margin-bottom: 2rem;
+    }
+    .loader-bar {
+      width: min(60vw, 400px); height: 2px; background: rgba(255,255,255,0.08);
+      border-radius: 1px; overflow: hidden;
+    }
+    .loader-bar-fill {
+      width: 0%; height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      transition: width 0.3s ease;
+    }
+    #loading-pct {
+      margin-top: 1rem; font-size: 0.75rem; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.15em;
+    }
+  </style>
+  <script type="module" crossorigin src="/assets/index-BcCysK18.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/three-uh_HwfYD.js">
+  <link rel="modulepreload" crossorigin href="/assets/gsap-DdEiTQuA.js">
+</head>
+<body>
+  <div id="loading-screen">
+    <h1>VIZON</h1>
+    <div class="loader-bar"><div class="loader-bar-fill" id="loader-fill"></div></div>
+    <div id="loading-pct">INITIALIZING SYSTEMS…</div>
+  </div>
+  <div id="app"></div>
+</body>
+</html>
