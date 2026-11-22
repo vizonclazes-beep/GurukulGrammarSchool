@@ -1,6 +1,7 @@
 // src/stations/biology.js — Medical-grade anatomical cutaway eukaryotic cell & SGU Atlas Terminal
 import * as THREE from 'three';
 import { stationPosition, COLOR_ALUMINUM, COLOR_POD_WHITE, COLOR_CYAN_ACCENT } from '../core/constants.js';
+import { getViewportRoot } from '../ui/deviceOrientation.js';
 
 /**
  * Builds the complete Biology Station.
@@ -49,129 +50,17 @@ export function buildBiologyStation(scene, globalUniforms, camera) {
   plinthLed.position.y = 0.05;
   group.add(plinthLed);
 
-  // ── 2. SEALED GLASS BIO-CONTAINMENT CYLINDER (LEFT SIDE) ──
-  const chamberGroup = new THREE.Group();
-  chamberGroup.position.set(-1.1, 0.6, 0);
-
-  // Lower containment ring
-  const ringMat = new THREE.MeshPhysicalMaterial({
-    color: COLOR_ALUMINUM,
-    metalness: 0.95,
-    roughness: 0.2,
-    clearcoat: 0.6,
-  });
-  const lowerRing = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.9, 0.25, 32), ringMat);
-  lowerRing.position.y = 0.125;
-  lowerRing.castShadow = true;
-  chamberGroup.add(lowerRing);
-
-  // Glass chamber cylinder
-  const glassChamberMat = new THREE.MeshPhysicalMaterial({
-    transmission: 0.94,
-    ior: 1.5,
-    roughness: 0.03,
-    metalness: 0.02,
-    thickness: 0.12,
-    transparent: true,
-    opacity: 1.0,
-    color: 0xffffff,
-    clearcoat: 1.0,
-  });
-  const glassCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.82, 2.8, 48, 1, true), glassChamberMat);
-  glassCylinder.position.y = 1.65;
-  chamberGroup.add(glassCylinder);
-
-  // Upper containment cap & air filtration manifold
-  const upperCap = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.85, 0.3, 32), ringMat);
-  upperCap.position.y = 3.2;
-  upperCap.castShadow = true;
-  chamberGroup.add(upperCap);
-
-  // Internal nutrient substrate disc at chamber bottom
-  const substrate = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.78, 0.78, 0.15, 32),
-    new THREE.MeshPhysicalMaterial({ color: 0x221a10, roughness: 0.8 })
-  );
-  substrate.position.y = 0.32;
-  chamberGroup.add(substrate);
-
-  // Internal biological growth grow-light
-  const growLight = new THREE.PointLight(0x44ff88, 1.2, 4.0, 1.8);
-  growLight.position.set(0, 3.0, 0);
-  chamberGroup.add(growLight);
-
-  // ── 3. PROCEDURAL BRANCHED BOTANICAL SPECIMEN ──
-  const plantGroup = new THREE.Group();
-  plantGroup.position.set(0, 0.4, 0);
-
-  const barkMat = new THREE.MeshPhysicalMaterial({
-    color: 0x3d2817,
-    roughness: 0.85,
-    metalness: 0.05,
-  });
-
-  const leafMat = new THREE.MeshPhysicalMaterial({
-    color: 0x248a44,
-    roughness: 0.3,
-    metalness: 0.05,
-    sheen: 0.6,
-    sheenColor: new THREE.Color(0x55ee77),
-    transmission: 0.28,
-    thickness: 0.3,
-    side: THREE.DoubleSide,
-  });
-
-  function createBranch(startPoint, dir, length, radius, depth) {
-    if (depth <= 0 || length < 0.12) return;
-    const endPoint = startPoint.clone().add(dir.clone().multiplyScalar(length));
-    const curve = new THREE.LineCurve3(startPoint, endPoint);
-    const tubeGeo = new THREE.TubeGeometry(curve, 8, radius, 8, false);
-    const tubeMesh = new THREE.Mesh(tubeGeo, barkMat);
-    plantGroup.add(tubeMesh);
-
-    if (depth <= 2) {
-      const leafCount = 2 + Math.floor(Math.random() * 3);
-      for (let l = 0; l < leafCount; l++) {
-        const leafGeo = new THREE.PlaneGeometry(0.18, 0.32);
-        leafGeo.translate(0, 0.16, 0);
-        const leaf = new THREE.Mesh(leafGeo, leafMat);
-        leaf.position.copy(endPoint);
-        leaf.rotation.set(
-          Math.random() * Math.PI,
-          Math.random() * Math.PI * 2,
-          Math.random() * Math.PI
-        );
-        plantGroup.add(leaf);
-      }
-    }
-
-    const childCount = 2;
-    for (let c = 0; c < childCount; c++) {
-      const spreadAngle = 0.35 + Math.random() * 0.25;
-      const rotAngle = (c * Math.PI) + (Math.random() - 0.5) * 0.5;
-      const childDir = dir.clone()
-        .applyAxisAngle(new THREE.Vector3(1, 0, 0), spreadAngle)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), rotAngle)
-        .normalize();
-      createBranch(endPoint, childDir, length * 0.72, radius * 0.65, depth - 1);
-    }
-  }
-
-  createBranch(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), 0.75, 0.065, 4);
-  chamberGroup.add(plantGroup);
-  group.add(chamberGroup);
-
-  // ── 4. MEDICAL-GRADE 3D CUTAWAY EUKARYOTIC CELL (SGU BENCHMARK) ──
-  // Floating biological showpiece at x = 1.2, y = 2.15, z = 0
+  // ── 2. MEDICAL-GRADE 3D CUTAWAY EUKARYOTIC CELL (SGU BENCHMARK) ──
+  // Centered biological showpiece at x = 0, y = 2.15, z = 0
   const cellGroup = new THREE.Group();
   cellGroup.name = 'EukaryoticCellModel';
-  cellGroup.position.set(1.2, 2.15, 0);
+  cellGroup.position.set(0, 2.15, 0);
   group.add(cellGroup);
 
   // Hologram Projector Dais & Illumination Cone
   const emitterGeo = new THREE.CylinderGeometry(0.85, 0.95, 0.18, 48);
   const emitter = new THREE.Mesh(emitterGeo, baseMat);
-  emitter.position.set(1.2, 0.65, 0);
+  emitter.position.set(0, 0.65, 0);
   group.add(emitter);
 
   const emitterRing = new THREE.Mesh(
@@ -184,7 +73,7 @@ export function buildBiologyStation(scene, globalUniforms, camera) {
     })
   );
   emitterRing.rotateX(-Math.PI / 2);
-  emitterRing.position.set(1.2, 0.742, 0);
+  emitterRing.position.set(0, 0.742, 0);
   group.add(emitterRing);
 
   // Soft upward biological illumination cone
@@ -198,12 +87,12 @@ export function buildBiologyStation(scene, globalUniforms, camera) {
     depthWrite: false,
   });
   const bioCone = new THREE.Mesh(coneGeo, coneMat);
-  bioCone.position.set(1.2, 1.45, 0);
+  bioCone.position.set(0, 1.45, 0);
   group.add(bioCone);
 
   // Point light inside emitter illuminating cell from below
   const cellSubLight = new THREE.PointLight(0x00e5ff, 1.5, 3.5, 1.8);
-  cellSubLight.position.set(1.2, 1.0, 0);
+  cellSubLight.position.set(0, 1.0, 0);
   group.add(cellSubLight);
 
   // ── A) 3/4 CUTAWAY PLASMA MEMBRANE & CYTOSOL (LIPID BILAYER) ──
@@ -777,7 +666,8 @@ export function buildBiologyStation(scene, globalUniforms, camera) {
           <iframe title="Eukaryotic Cell - SGUMedArt" src="https://sketchfab.com/models/b7d84e5f2d5e411fbb195ab2742f2256/embed?autostart=1&ui_theme=dark&annotations_visible=1" style="width:100%; height:100%; border:none;" allow="autoplay; fullscreen; xr-spatial-tracking" xr-spatial-tracking execution-while-out-of-viewport execution-while-not-rendered web-share allowfullscreen></iframe>
         </div>
       `;
-      document.body.appendChild(modal);
+      const root = getViewportRoot();
+      root.appendChild(modal);
 
       const closeBtn = modal.querySelector('#vz-sgu-modal-close');
       const closeModal = () => {
@@ -794,9 +684,6 @@ export function buildBiologyStation(scene, globalUniforms, camera) {
 
   // ── 6. UPDATE LOOP & ORGANELLE ISOLATION LOGIC ──
   const update = (elapsed, dt) => {
-    // Gentle plant sway inside chamber
-    plantGroup.rotation.z = Math.sin(elapsed * 0.8) * 0.02;
-
     // Organic floating cell rotation and breathing pulsation (cutaway oriented toward front walkway)
     cellGroup.rotation.y = -1.2 + elapsed * 0.16;
     const pulse = 1.0 + Math.sin(elapsed * 1.5) * 0.012;

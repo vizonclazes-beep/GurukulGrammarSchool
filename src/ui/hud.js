@@ -2,6 +2,7 @@
 // Pure HTML/CSS injected into the DOM. No external stylesheets required.
 import { FLAME_ELEMENTS } from '../stations/chemistry.js';
 import { ambientAudio } from '../audio/ambientAudio.js';
+import { getViewportRoot } from './deviceOrientation.js';
 
 /**
  * @typedef {Object} StationContexts
@@ -177,13 +178,19 @@ function injectStyles() {
       transform: translateX(0);
     }
 
+    /* ── Panel Header Wrapper & Controls ── */
+    .vz-panel-header-wrap {
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+
     .vz-panel-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 8px;
     }
 
     .vz-panel-title {
@@ -196,6 +203,105 @@ function injectStyles() {
       display: flex;
       align-items: center;
       gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .vz-panel-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    /* ── Auto-Hide Option Button ── */
+    .vz-panel-autohide-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      color: rgba(224, 232, 255, 0.65);
+      cursor: pointer;
+      font-size: 9.5px;
+      font-weight: 700;
+      font-family: inherit;
+      padding: 3px 8px;
+      line-height: 1;
+      letter-spacing: 0.06em;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    .vz-panel-autohide-btn:hover {
+      background: rgba(0, 229, 255, 0.12);
+      border-color: rgba(0, 229, 255, 0.35);
+      color: #00e5ff;
+    }
+
+    .vz-panel-autohide-btn.active {
+      background: rgba(0, 229, 255, 0.14);
+      border-color: rgba(0, 229, 255, 0.5);
+      color: #00e5ff;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+    }
+
+    .vz-autohide-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      display: inline-block;
+      transition: all 0.2s ease;
+    }
+
+    .vz-autohide-dot.active {
+      background: #00e5ff;
+      box-shadow: 0 0 6px #00e5ff;
+      animation: vz-pulse-dot 2s infinite ease-in-out;
+    }
+
+    @keyframes vz-pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.3); opacity: 1; }
+    }
+
+    .vz-autohide-icon {
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    .vz-text-short {
+      display: none;
+    }
+
+    .vz-text-full {
+      display: inline;
+    }
+
+    /* ── Auto-Hide Progress Countdown Bar ── */
+    .vz-autohide-track {
+      width: 100%;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 1px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .vz-autohide-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #00e5ff, #38bdf8);
+      box-shadow: 0 0 6px rgba(0, 229, 255, 0.6);
+      border-radius: 1px;
+      transform-origin: left center;
+      transition: width 0.08s linear;
     }
 
     .vz-panel-close-btn {
@@ -204,7 +310,7 @@ function injectStyles() {
       border-radius: 6px;
       color: rgba(224, 232, 255, 0.8);
       cursor: pointer;
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 700;
       font-family: inherit;
       padding: 3px 8px;
@@ -214,6 +320,9 @@ function injectStyles() {
       align-items: center;
       gap: 3px;
       transition: all 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
     }
 
     .vz-panel-close-btn:hover {
@@ -230,6 +339,8 @@ function injectStyles() {
       right: 0;
       transform: translateY(-50%);
       padding: 9px 14px 9px 12px;
+      min-height: 40px;
+      min-width: 44px;
       border: 1px solid rgba(0, 229, 255, 0.5);
       border-right: none;
       border-radius: 10px 0 0 10px;
@@ -250,6 +361,9 @@ function injectStyles() {
       gap: 7px;
       transition: all 0.25s ease;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 14px rgba(0, 229, 255, 0.25);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
     }
 
     .vz-edge-tab:hover {
@@ -483,10 +597,43 @@ function injectStyles() {
       .vz-edge-tab:hover {
         transform: translateY(-2px);
       }
+
+      .vz-text-short {
+        display: inline;
+      }
+
+      .vz-text-full {
+        display: none;
+      }
+
+      .vz-panel-header {
+        gap: 4px;
+      }
+
+      .vz-panel-title {
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        max-width: 110px;
+      }
+
+      .vz-panel-header-actions {
+        gap: 4px;
+      }
+
+      .vz-panel-autohide-btn {
+        padding: 3px 6px;
+        font-size: 8.5px;
+        gap: 3px;
+      }
+
+      .vz-panel-close-btn {
+        padding: 3px 6px;
+        font-size: 8.5px;
+      }
     }
 
     /* ── 2. LANDSCAPE MODE (Mobile Phones, Tablets & iPads) ── */
-    @media (orientation: landscape) and (max-height: 850px), body.vz-orientation-landscape #vz-panel-container {
+    @media (orientation: landscape) {
       #vz-navbar {
         bottom: 10px;
         padding: 3px 6px;
@@ -507,15 +654,15 @@ function injectStyles() {
         letter-spacing: 0.05em;
       }
 
-      /* Wide landscape-oriented card on the right */
+      /* Wide landscape-oriented card on the right, neatly below top-right status controls */
       #vz-panel-container {
-        top: 12px;
+        top: 68px;
         bottom: 58px;
-        right: 14px;
+        right: 18px;
         left: auto;
-        width: 420px;
-        max-width: calc(100vw - 90px);
-        max-height: calc(100vh - 70px);
+        width: 390px;
+        max-width: calc(100% - 90px);
+        max-height: calc(100% - 130px);
         transform: none;
       }
 
@@ -525,7 +672,7 @@ function injectStyles() {
 
       .vz-panel {
         padding: 12px 16px;
-        max-height: calc(100vh - 70px);
+        max-height: calc(100% - 70px);
       }
 
       /* In landscape mode, arrange buttons in a clean 2-3 column grid */
@@ -560,6 +707,186 @@ function injectStyles() {
       .vz-edge-tab:hover {
         transform: translateY(-2px);
       }
+
+      .vz-text-short {
+        display: none;
+      }
+
+      .vz-text-full {
+        display: inline;
+      }
+    }
+
+    body.vz-orientation-landscape #vz-navbar {
+      bottom: 10px;
+      padding: 3px 6px;
+      gap: 2px;
+    }
+
+    body.vz-orientation-landscape .vz-nav-btn {
+      padding: 5px 8px;
+      min-width: 44px;
+    }
+
+    body.vz-orientation-landscape .vz-nav-icon {
+      font-size: 15px;
+    }
+
+    body.vz-orientation-landscape .vz-nav-label {
+      font-size: 8px;
+      letter-spacing: 0.05em;
+    }
+
+    body.vz-orientation-landscape #vz-panel-container {
+      top: 68px;
+      bottom: 58px;
+      right: 18px;
+      left: auto;
+      width: 390px;
+      max-width: calc(100% - 90px);
+      max-height: calc(100% - 130px);
+      transform: none;
+    }
+
+    body.vz-orientation-landscape #vz-panel-container.hidden-state {
+      transform: translateX(35px);
+    }
+
+    body.vz-orientation-landscape .vz-panel {
+      padding: 12px 16px;
+      max-height: calc(100% - 70px);
+    }
+
+    body.vz-orientation-landscape .vz-btn-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+      gap: 6px;
+    }
+
+    body.vz-orientation-landscape .vz-btn-pill {
+      padding: 5px 8px;
+      font-size: 9.5px;
+      text-align: center;
+    }
+
+    body.vz-orientation-landscape .vz-panel-info {
+      font-size: 10px !important;
+      padding: 8px !important;
+      line-height: 1.38 !important;
+    }
+
+    body.vz-orientation-landscape .vz-edge-tab {
+      top: auto;
+      bottom: 58px;
+      right: 18px;
+      border-radius: 20px;
+      border-right: 1px solid rgba(0, 229, 255, 0.5);
+      transform: none;
+      padding: 7px 14px;
+    }
+
+    body.vz-orientation-landscape .vz-edge-tab:hover {
+      transform: translateY(-2px);
+    }
+
+    body.vz-orientation-landscape .vz-text-short {
+      display: none;
+    }
+
+    body.vz-orientation-landscape .vz-text-full {
+      display: inline;
+    }
+
+    /* ── Desktop Screens (>= 1025px): Center right, clear of top status controls ── */
+    @media (min-width: 1025px) {
+      #vz-panel-container {
+        top: 50% !important;
+        bottom: auto !important;
+        right: 24px !important;
+        transform: translateY(-50%) !important;
+        width: 380px !important;
+        max-height: calc(100vh - 160px) !important;
+      }
+
+      #vz-panel-container.hidden-state {
+        transform: translateY(-50%) translateX(35px) !important;
+      }
+
+      .vz-edge-tab {
+        top: 50% !important;
+        bottom: auto !important;
+        right: 0 !important;
+        transform: translateY(-50%) !important;
+        border-radius: 10px 0 0 10px !important;
+        border-right: none !important;
+      }
+
+      .vz-edge-tab:hover {
+        transform: translateY(-50%) translateX(-2px) !important;
+      }
+    }
+
+    /* ── Portrait Orientation Override for Locked Modes ── */
+    body.vz-orientation-portrait .vz-text-short {
+      display: inline;
+    }
+
+    body.vz-orientation-portrait .vz-text-full {
+      display: none;
+    }
+
+    body.vz-orientation-portrait .vz-panel-header {
+      gap: 4px;
+    }
+
+    body.vz-orientation-portrait .vz-panel-title {
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      max-width: 110px;
+    }
+
+    body.vz-orientation-portrait .vz-panel-header-actions {
+      gap: 4px;
+    }
+
+    body.vz-orientation-portrait .vz-panel-autohide-btn {
+      padding: 3px 6px;
+      font-size: 8.5px;
+      gap: 3px;
+    }
+
+    body.vz-orientation-portrait .vz-panel-close-btn {
+      padding: 3px 6px;
+      font-size: 8.5px;
+    }
+
+    body.vz-orientation-portrait #vz-panel-container {
+      top: auto;
+      bottom: 78px;
+      right: 12px;
+      left: auto;
+      width: 300px;
+      max-width: calc(100vw - 24px);
+      max-height: 48vh;
+      transform: none;
+    }
+
+    body.vz-orientation-portrait #vz-panel-container.hidden-state {
+      transform: translateY(20px);
+    }
+
+    body.vz-orientation-portrait .vz-edge-tab {
+      top: auto;
+      bottom: 78px;
+      right: 12px;
+      border-radius: 20px;
+      border-right: 1px solid rgba(0, 229, 255, 0.5);
+      transform: none;
+      padding: 7px 14px;
+    }
+
+    body.vz-orientation-portrait .vz-edge-tab:hover {
+      transform: translateY(-2px);
     }
 
     /* ── 3. TABLETS & IPAD SPECIFIC OPTIMIZATIONS ── */
@@ -579,6 +906,24 @@ function injectStyles() {
         max-height: 52vh;
         bottom: 84px;
         right: 18px;
+      }
+
+      .vz-edge-tab {
+        top: auto;
+        bottom: 84px;
+        right: 18px;
+        border-radius: 20px;
+        border-right: 1px solid rgba(0, 229, 255, 0.5);
+        transform: none;
+        padding: 7px 14px;
+      }
+
+      .vz-text-short {
+        display: none;
+      }
+
+      .vz-text-full {
+        display: inline;
       }
     }
   `;
@@ -606,22 +951,75 @@ function updateSliderFill(slider) {
   slider.style.setProperty('--fill', `${pct}%`);
 }
 
-/** Create a standardized panel header with title and HIDE toggle button. */
-function createPanelHeader(titleText, onHide) {
+/**
+ * Create a standardized panel header with title, Auto-Hide option toggle button,
+ * manual HIDE button, and countdown progress bar.
+ */
+function createPanelHeader(titleText, optionsOrOnHide) {
+  const options = typeof optionsOrOnHide === 'function'
+    ? { onHide: optionsOrOnHide }
+    : (optionsOrOnHide || {});
+  const { onHide, onToggleAutoHide, registerHeaderControls } = options;
+
+  const headerWrapper = el('div', { cls: 'vz-panel-header-wrap' });
   const header = el('div', { cls: 'vz-panel-header' });
   const title = el('div', { cls: 'vz-panel-title', html: titleText });
+
+  const actions = el('div', { cls: 'vz-panel-header-actions' });
+
+  // Auto-Hide Option Button
+  const autoHideBtn = el('button', {
+    cls: 'vz-panel-autohide-btn active',
+    attrs: {
+      type: 'button',
+      title: 'Auto-hide is ON (hides after 6s of inactivity). Click to keep controls open.',
+    },
+  });
+
+  const dot = el('span', { cls: 'vz-autohide-dot active' });
+  const icon = el('span', { cls: 'vz-autohide-icon', html: '⏱️' });
+  const fullText = el('span', { cls: 'vz-autohide-text vz-text-full', html: 'AUTO-HIDE: ON' });
+  const shortText = el('span', { cls: 'vz-autohide-text vz-text-short', html: 'AUTO: ON' });
+
+  autoHideBtn.appendChild(dot);
+  autoHideBtn.appendChild(icon);
+  autoHideBtn.appendChild(fullText);
+  autoHideBtn.appendChild(shortText);
+
+  autoHideBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onToggleAutoHide?.();
+  });
+
+  // Manual Hide Button
   const hideBtn = el('button', {
     cls: 'vz-panel-close-btn',
-    html: '<span style="font-size:11px; margin-right:3px;">✕</span> HIDE',
-    attrs: { title: 'Hide controls for unobstructed 3D viewing' },
+    html: '<span style="font-size:10px; margin-right:3px;">✕</span> HIDE',
+    attrs: { type: 'button', title: 'Hide controls for unobstructed 3D viewing' },
   });
   hideBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     onHide?.();
   });
+
+  actions.appendChild(autoHideBtn);
+  actions.appendChild(hideBtn);
+
   header.appendChild(title);
-  header.appendChild(hideBtn);
-  return header;
+  header.appendChild(actions);
+  headerWrapper.appendChild(header);
+
+  // Auto-Hide Visual Countdown Progress Bar
+  const progressBarTrack = el('div', { cls: 'vz-autohide-track' });
+  const progressBarFill = el('div', { cls: 'vz-autohide-fill' });
+  progressBarTrack.appendChild(progressBarFill);
+  headerWrapper.appendChild(progressBarTrack);
+
+  if (registerHeaderControls) {
+    registerHeaderControls(autoHideBtn, progressBarFill, fullText, shortText, dot, progressBarTrack);
+  }
+
+  return headerWrapper;
 }
 
 /**
@@ -639,7 +1037,8 @@ export function buildHUD(ctx) {
   //  ROOT CONTAINER
   // ════════════════════════════════
   const hud = el('div', { attrs: { id: 'vizon-hud' } });
-  document.body.appendChild(hud);
+  const root = getViewportRoot();
+  root.appendChild(hud);
 
   // ════════════════════════════════
   //  NAV BAR
@@ -653,6 +1052,7 @@ export function buildHUD(ctx) {
     html: `<span class="vz-nav-icon">🏠</span><span class="vz-nav-label">Home</span>`,
   });
   homeBtn.addEventListener('click', () => {
+    window.__sim?.mobileRobots?.telemetry?.deselect?.();
     setActiveStation(null);
     cameraAnim.transitionToSpawn();
   });
@@ -669,6 +1069,7 @@ export function buildHUD(ctx) {
       html: `<span class="vz-nav-icon">${st.icon}</span><span class="vz-nav-label">${st.label}</span>`,
     });
     btn.addEventListener('click', () => {
+      window.__sim?.mobileRobots?.telemetry?.deselect?.();
       setActiveStation(st.key);
       cameraAnim.transitionTo(st.key);
     });
@@ -681,18 +1082,18 @@ export function buildHUD(ctx) {
 
   // ── Bottom Nav Audio Control (Music symbol to unmute, cut music symbol to mute) ──
   const soundBtn = el('button', {
-    cls: 'vz-nav-btn vz-sound-btn muted',
-    attrs: { id: 'vz-nav-sound-btn', title: 'Unmute Ambient Sound' },
+    cls: 'vz-nav-btn vz-sound-btn playing',
+    attrs: { id: 'vz-nav-sound-btn', title: 'Mute Ambient Sound' },
   });
 
   const soundIconWrap = el('span', { cls: 'vz-nav-icon' });
-  const soundLabel = el('span', { cls: 'vz-nav-label', html: 'Sound' });
+  const soundLabel = el('span', { cls: 'vz-nav-label', html: 'Mute' });
   soundBtn.appendChild(soundIconWrap);
   soundBtn.appendChild(soundLabel);
   navbar.appendChild(soundBtn);
 
   function updateSoundButton() {
-    const isMuted = ambientAudio.isMuted || !ambientAudio.isPlaying;
+    const isMuted = ambientAudio.isMuted;
     if (isMuted) {
       // Muted: show music symbol to UNMUTE
       soundIconWrap.innerHTML = `
@@ -707,7 +1108,7 @@ export function buildHUD(ctx) {
       soundBtn.classList.remove('playing');
       soundBtn.setAttribute('title', 'Click to Unmute Ambient Sound');
     } else {
-      // Playing: show cut music symbol to MUTE
+      // Sound ON: show cut music symbol to MUTE
       soundIconWrap.innerHTML = `
         <svg class="vz-nav-music-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 18V5l12-2v13"></path>
@@ -749,11 +1150,126 @@ export function buildHUD(ctx) {
     attrs: { id: 'vz-global-edge-tab', title: 'Show Station Controls' },
   });
   globalEdgeTab.innerHTML = `<span class="vz-edge-icon">⚙️</span><span class="vz-edge-label">SHOW CONTROLS</span>`;
-  document.body.appendChild(globalEdgeTab);
+  root.appendChild(globalEdgeTab);
+
+  // ── Auto-Hide State Management across all pod menus & device modes ──
+  const AUTOHIDE_STORAGE_KEY = 'vz_pod_autohide_enabled';
+  let isAutoHideEnabled = true;
+  try {
+    const saved = localStorage.getItem(AUTOHIDE_STORAGE_KEY);
+    if (saved !== null) {
+      isAutoHideEnabled = saved === 'true';
+    }
+  } catch (err) {
+    // Ignore restricted storage contexts
+  }
+
+  const AUTOHIDE_DURATION = 6000; // 6 seconds idle timeout
+  let autoHideTimer = null;
+  let autoHideStartTime = 0;
+  let isHoveredOrInteracting = false;
+  let progressAnimFrame = null;
+
+  const autoHideButtons = [];
+  const autoHideProgressBars = [];
+
+  function updateAutoHideUI() {
+    for (const item of autoHideButtons) {
+      const { btn, fullTxt, shortTxt, dot, track } = item;
+      btn.classList.toggle('active', isAutoHideEnabled);
+      if (dot) dot.classList.toggle('active', isAutoHideEnabled);
+      if (fullTxt) fullTxt.textContent = isAutoHideEnabled ? 'AUTO-HIDE: ON' : 'AUTO-HIDE: OFF';
+      if (shortTxt) shortTxt.textContent = isAutoHideEnabled ? 'AUTO: ON' : 'AUTO: OFF';
+      btn.setAttribute(
+        'title',
+        isAutoHideEnabled
+          ? 'Auto-hide is ON (hides after 6s of inactivity). Click to keep controls open.'
+          : 'Auto-hide is OFF (controls stay open). Click to enable 6s auto-hide.'
+      );
+      if (track) {
+        track.style.display = isAutoHideEnabled ? 'block' : 'none';
+      }
+    }
+    for (const bar of autoHideProgressBars) {
+      if (!isAutoHideEnabled) {
+        bar.style.width = '100%';
+      }
+    }
+  }
+
+  function setAutoHideProgress(pct) {
+    for (const bar of autoHideProgressBars) {
+      bar.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    }
+  }
+
+  function clearAutoHide() {
+    if (autoHideTimer) {
+      clearTimeout(autoHideTimer);
+      autoHideTimer = null;
+    }
+    if (progressAnimFrame) {
+      cancelAnimationFrame(progressAnimFrame);
+      progressAnimFrame = null;
+    }
+  }
+
+  function resetAutoHide() {
+    clearAutoHide();
+    if (!isAutoHideEnabled || isControlsHidden || currentStation === null) {
+      setAutoHideProgress(100);
+      return;
+    }
+
+    if (isHoveredOrInteracting) {
+      setAutoHideProgress(100);
+      return;
+    }
+
+    autoHideStartTime = performance.now();
+    setAutoHideProgress(100);
+
+    const updateProgress = () => {
+      if (!isAutoHideEnabled || isControlsHidden || currentStation === null || isHoveredOrInteracting) {
+        return;
+      }
+      const elapsed = performance.now() - autoHideStartTime;
+      const left = Math.max(0, AUTOHIDE_DURATION - elapsed);
+      const pct = (left / AUTOHIDE_DURATION) * 100;
+      setAutoHideProgress(pct);
+
+      if (left > 0) {
+        progressAnimFrame = requestAnimationFrame(updateProgress);
+      }
+    };
+
+    progressAnimFrame = requestAnimationFrame(updateProgress);
+
+    autoHideTimer = setTimeout(() => {
+      if (isAutoHideEnabled && !isControlsHidden && currentStation !== null && !isHoveredOrInteracting) {
+        hideControls();
+      }
+    }, AUTOHIDE_DURATION);
+  }
+
+  function toggleAutoHide() {
+    isAutoHideEnabled = !isAutoHideEnabled;
+    try {
+      localStorage.setItem(AUTOHIDE_STORAGE_KEY, String(isAutoHideEnabled));
+    } catch (err) {}
+    updateAutoHideUI();
+    if (isAutoHideEnabled) {
+      resetAutoHide();
+    } else {
+      clearAutoHide();
+      setAutoHideProgress(100);
+    }
+  }
 
   function hideControls() {
     isControlsHidden = true;
     panelContainer.classList.add('hidden-state');
+    clearAutoHide();
     if (currentStation) {
       const st = STATIONS.find((s) => s.key === currentStation);
       globalEdgeTab.innerHTML = `<span class="vz-edge-icon">${st?.icon || '⚙️'}</span><span class="vz-edge-label">SHOW ${st?.label.toUpperCase() || 'CONTROLS'}</span>`;
@@ -765,6 +1281,7 @@ export function buildHUD(ctx) {
     isControlsHidden = false;
     panelContainer.classList.remove('hidden-state');
     globalEdgeTab.classList.remove('visible');
+    resetAutoHide();
   }
 
   globalEdgeTab.addEventListener('click', (e) => {
@@ -772,31 +1289,96 @@ export function buildHUD(ctx) {
     showControls();
   });
 
-  const onHide = () => {
-    hideControls();
+  // User activity listeners to pause or reset timer across all devices
+  panelContainer.addEventListener('mouseenter', () => {
+    isHoveredOrInteracting = true;
+    clearAutoHide();
+    setAutoHideProgress(100);
+  });
+
+  panelContainer.addEventListener('mouseleave', () => {
+    isHoveredOrInteracting = false;
+    resetAutoHide();
+  });
+
+  panelContainer.addEventListener('pointerdown', () => {
+    isHoveredOrInteracting = true;
+    clearAutoHide();
+    setAutoHideProgress(100);
+  });
+
+  window.addEventListener('pointerup', () => {
+    if (isHoveredOrInteracting) {
+      isHoveredOrInteracting = false;
+      resetAutoHide();
+    }
+  });
+
+  panelContainer.addEventListener('touchstart', () => {
+    isHoveredOrInteracting = true;
+    clearAutoHide();
+    setAutoHideProgress(100);
+  }, { passive: true });
+
+  window.addEventListener('touchend', () => {
+    if (isHoveredOrInteracting) {
+      isHoveredOrInteracting = false;
+      resetAutoHide();
+    }
+  }, { passive: true });
+
+  panelContainer.addEventListener('input', () => {
+    resetAutoHide();
+  });
+  panelContainer.addEventListener('change', () => {
+    resetAutoHide();
+  });
+  panelContainer.addEventListener('scroll', () => {
+    resetAutoHide();
+  }, { passive: true });
+  panelContainer.addEventListener('wheel', () => {
+    resetAutoHide();
+  }, { passive: true });
+  panelContainer.addEventListener('click', (e) => {
+    if (!e.target.closest('.vz-panel-close-btn') && !e.target.closest('.vz-panel-autohide-btn')) {
+      resetAutoHide();
+    }
+  });
+
+  const autoHideManager = {
+    onHide: () => hideControls(),
+    onToggleAutoHide: () => toggleAutoHide(),
+    registerHeaderControls: (btn, fill, fullTxt, shortTxt, dot, track) => {
+      autoHideButtons.push({ btn, fullTxt, shortTxt, dot, track });
+      if (fill) autoHideProgressBars.push(fill);
+    },
+    resetAutoHide: () => resetAutoHide(),
   };
 
   const panels = {};
 
   // ── Physics Panel ──
-  panels.physics = buildPhysicsPanel(ctx.physics, onHide);
+  panels.physics = buildPhysicsPanel(ctx.physics, autoHideManager);
   panelContainer.appendChild(panels.physics);
 
   // ── Chemistry Panel ──
-  panels.chemistry = buildChemistryPanel(ctx.chemistry, onHide);
+  panels.chemistry = buildChemistryPanel(ctx.chemistry, autoHideManager);
   panelContainer.appendChild(panels.chemistry);
 
   // ── Biology Panel ──
-  panels.biology = buildBiologyPanel(ctx.biology, onHide);
+  panels.biology = buildBiologyPanel(ctx.biology, autoHideManager);
   panelContainer.appendChild(panels.biology);
 
   // ── Mathematics Panel ──
-  panels.mathematics = buildMathPanel(ctx.math, onHide);
+  panels.mathematics = buildMathPanel(ctx.math, autoHideManager);
   panelContainer.appendChild(panels.mathematics);
 
   // ── Astronomy Panel ──
-  panels.astronomy = buildAstronomyPanel(ctx.astroRobotics, onHide);
+  panels.astronomy = buildAstronomyPanel(ctx.astroRobotics, autoHideManager);
   panelContainer.appendChild(panels.astronomy);
+
+  // Apply initial saved auto-hide toggle state across all pods
+  updateAutoHideUI();
 
   // ════════════════════════════════
   //  STATE MANAGEMENT
@@ -814,6 +1396,7 @@ export function buildHUD(ctx) {
 
     if (key === null) {
       // At home: hide edge tab and panels
+      clearAutoHide();
       globalEdgeTab.classList.remove('visible');
       panelContainer.classList.remove('hidden-state');
       isControlsHidden = false;
@@ -849,6 +1432,9 @@ export function buildHUD(ctx) {
         }, 400);
       }
     }
+
+    // Start auto-hide countdown for active station pod menu
+    resetAutoHide();
   }
 
   // Listen to camera animation station changes
@@ -866,6 +1452,10 @@ export function buildHUD(ctx) {
     get currentStation() {
       return currentStation;
     },
+    toggleAutoHide,
+    resetAutoHide,
+    hideControls,
+    showControls,
   };
 }
 
@@ -873,9 +1463,9 @@ export function buildHUD(ctx) {
 //  PANEL BUILDERS
 // ════════════════════════════════════════
 
-function buildPhysicsPanel(physicsCtx, onHide) {
+function buildPhysicsPanel(physicsCtx, autoHideManager) {
   const panel = el('div', { cls: 'vz-panel vz-glass' });
-  panel.appendChild(createPanelHeader('⚡ Physics Controls', onHide));
+  panel.appendChild(createPanelHeader('⚡ Physics Controls', autoHideManager));
 
   // Voltage slider
   const row = el('div', { cls: 'vz-panel-row' });
@@ -896,6 +1486,7 @@ function buildPhysicsPanel(physicsCtx, onHide) {
     if (physicsCtx?.controls?.voltage) {
       physicsCtx.controls.voltage.value = v;
     }
+    autoHideManager?.resetAutoHide?.();
   });
 
   updateSliderFill(slider);
@@ -906,9 +1497,9 @@ function buildPhysicsPanel(physicsCtx, onHide) {
   return panel;
 }
 
-function buildChemistryPanel(chemCtx, onHide) {
+function buildChemistryPanel(chemCtx, autoHideManager) {
   const panel = el('div', { cls: 'vz-panel vz-glass' });
-  panel.appendChild(createPanelHeader('🧪 Flame Test & Spectroscopy', onHide));
+  panel.appendChild(createPanelHeader('🧪 Flame Test & Spectroscopy', autoHideManager));
 
   // Metal Salt Inoculation Selector
   const elemRow = el('div', { cls: 'vz-panel-row' });
@@ -959,6 +1550,7 @@ function buildChemistryPanel(chemCtx, onHide) {
       }
       chemCtx?.controls?.setElement?.(item.key);
       updateInfo(item.key);
+      autoHideManager?.resetAutoHide?.();
     });
     elemButtons[item.key] = btn;
     elemGroup.appendChild(btn);
@@ -992,6 +1584,7 @@ function buildChemistryPanel(chemCtx, onHide) {
     if (chemCtx?.controls?.airCollar) {
       chemCtx.controls.airCollar.value = v;
     }
+    autoHideManager?.resetAutoHide?.();
   });
 
   updateSliderFill(slider);
@@ -1006,9 +1599,9 @@ function buildChemistryPanel(chemCtx, onHide) {
   return panel;
 }
 
-function buildBiologyPanel(bioCtx, onHide) {
+function buildBiologyPanel(bioCtx, autoHideManager) {
   const panel = el('div', { cls: 'vz-panel vz-glass' });
-  panel.appendChild(createPanelHeader('🧬 Biology Controls', onHide));
+  panel.appendChild(createPanelHeader('🧬 Biology Controls', autoHideManager));
 
   // Organelle isolation buttons
   const row = el('div', { cls: 'vz-panel-row' });
@@ -1044,6 +1637,7 @@ function buildBiologyPanel(bioCtx, onHide) {
       if (bioCtx?.controls?.organelleIsolation) {
         bioCtx.controls.organelleIsolation.value = org.key;
       }
+      autoHideManager?.resetAutoHide?.();
     });
     orgButtons[org.key] = btn;
     group.appendChild(btn);
@@ -1061,6 +1655,7 @@ function buildBiologyPanel(bioCtx, onHide) {
   });
   sguBtn.addEventListener('click', () => {
     bioCtx?.openSguModal?.();
+    autoHideManager?.resetAutoHide?.();
   });
   sguRow.appendChild(sguBtn);
   panel.appendChild(sguRow);
@@ -1068,9 +1663,9 @@ function buildBiologyPanel(bioCtx, onHide) {
   return panel;
 }
 
-function buildMathPanel(mathCtx, onHide) {
+function buildMathPanel(mathCtx, autoHideManager) {
   const panel = el('div', { cls: 'vz-panel vz-glass' });
-  panel.appendChild(createPanelHeader('📐 Mathematics', onHide));
+  panel.appendChild(createPanelHeader('📐 Mathematics', autoHideManager));
 
   // ── Mode Selector ──
   const modeRow = el('div', { cls: 'vz-panel-row' });
@@ -1097,6 +1692,7 @@ function buildMathPanel(mathCtx, onHide) {
       if (mathCtx?.controls?.displayMode) {
         mathCtx.controls.displayMode.value = m.key;
       }
+      autoHideManager?.resetAutoHide?.();
     });
     modeButtons[m.key] = btn;
     modeGroup.appendChild(btn);
@@ -1117,6 +1713,7 @@ function buildMathPanel(mathCtx, onHide) {
     if (mathCtx?.controls?.rotationSpeed) {
       mathCtx.controls.rotationSpeed.value = parseFloat(e.target.value);
     }
+    autoHideManager?.resetAutoHide?.();
   });
   speedRow.appendChild(speedSlider);
   panel.appendChild(speedRow);
@@ -1132,11 +1729,11 @@ function buildMathPanel(mathCtx, onHide) {
   return panel;
 }
 
-function buildAstronomyPanel(astroCtx, onHide) {
+function buildAstronomyPanel(astroCtx, autoHideManager) {
   const panel = el('div', { cls: 'vz-panel vz-glass', attrs: { id: 'vz-astro-panel' } });
 
   // ── Header with Title and Minimize/Dismiss Button ──
-  panel.appendChild(createPanelHeader('🔭 Kepler Orrery & Deep Space', onHide));
+  panel.appendChild(createPanelHeader('🔭 Kepler Orrery & Deep Space', autoHideManager));
 
   // ── Orbital time-scale slider ──
   const timeRow = el('div', { cls: 'vz-panel-row' });
@@ -1157,7 +1754,7 @@ function buildAstronomyPanel(astroCtx, onHide) {
     if (astroCtx?.controls?.orbitalTimeScale) {
       astroCtx.controls.orbitalTimeScale.value = v;
     }
-    resetAutoHide();
+    autoHideManager?.resetAutoHide?.();
   });
 
   updateSliderFill(timeSlider);

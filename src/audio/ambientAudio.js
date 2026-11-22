@@ -1,5 +1,5 @@
-// src/audio/ambientAudio.js — Web Audio API Ambient Soundscape Manager for VIZON
-// High-fidelity background audio with smooth fades, autoplay unlock, and real-time visualization.
+// src/audio/ambientAudio.js — Web Audio API & HTML5 Audio Dual-Engine Soundscape Manager for VIZON
+// High-fidelity background audio with iOS/iPadOS Safari autoplay unlock, smooth fades, and real-time visualization.
 
 const STORAGE_KEY_MUTED = 'vizon_ambient_muted';
 const STORAGE_KEY_VOLUME = 'vizon_ambient_volume';
@@ -14,6 +14,10 @@ export class AmbientAudioController {
     this.analyserData = null;
     this.sourceNode = null;
     this.audioBuffer = null;
+
+    // Dual-mode HTML5 Audio element for 100% reliable iOS/iPadOS playback
+    this.audioEl = null;
+    this.mediaElementSource = null;
 
     // State
     this.isLoaded = false;
@@ -32,10 +36,12 @@ export class AmbientAudioController {
 
   _loadPreferences() {
     try {
-      const storedMuted = localStorage.getItem(STORAGE_KEY_MUTED);
-      if (storedMuted !== null) {
-        this.isMuted = storedMuted === 'true';
-      }
+      // Sound is ON by default for all modes (desktop, mobile, iPad, tablet)
+      this.isMuted = false;
+      try {
+        localStorage.removeItem(STORAGE_KEY_MUTED);
+      } catch (e) {}
+
       const storedVol = localStorage.getItem(STORAGE_KEY_VOLUME);
       if (storedVol !== null) {
         const v = parseFloat(storedVol);
@@ -69,130 +75,137 @@ export class AmbientAudioController {
       return null;
     }
 
-    this.audioCtx = new AudioContextClass();
+    try {
+      this.audioCtx = new AudioContextClass();
 
-    // Master Low-pass warm filter (rolls off harsh frequencies above 10kHz)
-    this.filterNode = this.audioCtx.createBiquadFilter();
-    this.filterNode.type = 'lowpass';
-    this.filterNode.frequency.setValueAtTime(11500, this.audioCtx.currentTime);
-    this.filterNode.Q.setValueAtTime(0.7, this.audioCtx.currentTime);
+      // Master Low-pass warm filter (rolls off harsh frequencies above 11.5kHz)
+      this.filterNode = this.audioCtx.createBiquadFilter();
+      this.filterNode.type = 'lowpass';
+      this.filterNode.frequency.setValueAtTime(11500, this.audioCtx.currentTime);
+      this.filterNode.Q.setValueAtTime(0.7, this.audioCtx.currentTime);
 
-    // Master Gain for smooth volume and mute envelopes
-    this.masterGain = this.audioCtx.createGain();
-    this.masterGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+      // Master Gain for smooth volume and mute envelopes
+      this.masterGain = this.audioCtx.createGain();
+      this.masterGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
 
-    // Analyser Node for visualizer wave bars on the HUD
-    this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = 64;
-    this.analyser.smoothingTimeConstant = 0.82;
-    this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
+      // Analyser Node for visualizer wave bars on the HUD
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 64;
+      this.analyser.smoothingTimeConstant = 0.82;
+      this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
 
-    // Audio Graph: Source -> Filter -> Analyser -> MasterGain -> Destination
-    this.filterNode.connect(this.analyser);
-    this.analyser.connect(this.masterGain);
-    this.masterGain.connect(this.audioCtx.destination);
+      // Audio Graph: Source -> Filter -> Analyser -> MasterGain -> Destination
+      this.filterNode.connect(this.analyser);
+      this.analyser.connect(this.masterGain);
+      this.masterGain.connect(this.audioCtx.destination);
+    } catch (err) {
+      console.warn('[Audio] Web Audio context initialization notice:', err);
+    }
 
     return this.audioCtx;
   }
 
   /**
-   * Loads the ambient audio asset and decodes it into an AudioBuffer.
+   * Loads the ambient audio asset and configures both HTML5 Audio and Web Audio decoding.
    * @param {string} url Path to audio file
    */
   async loadTrack(url = '/audio/ambient_space.wav') {
     this._ensureAudioContext();
-    if (!this.audioCtx) return;
 
+    // 1. Initialize HTML5 Audio element (instant playback on iOS Safari & tablets)
+    if (typeof Audio !== 'undefined' && !this.audioEl) {
+      try {
+        const el = new Audio(url);
+        el.loop = true;
+        el.volume = this.targetVolume;
+        el.preload = 'auto';
+        el.crossOrigin = 'anonymous';
+        this.audioEl = el;
+
+        // Attempt routing through Web Audio analyser & filter
+        if (this.audioCtx && !this.mediaElementSource) {
+          try {
+            this.mediaElementSource = this.audioCtx.createMediaElementSource(el);
+            this.mediaElementSource.connect(this.filterNode);
+          } catch (e) {
+            // If cross-origin or iOS policy prevents MediaElementSource routing, audioEl plays directly to speakers
+            console.log('[Audio] HTML5 audio playing directly to system output');
+          }
+        }
+      } catch (e) {
+        console.warn('[Audio] HTML5 Audio element setup notice:', e);
+      }
+    }
+
+    // 2. Fetch and decode AudioBuffer for Web Audio synthesis
     try {
       const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to load audio asset: ${response.status} ${response.statusText}`);
-      }
-      const arrayBuffer = await response.arrayBuffer();
-      this.audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
-      this.isLoaded = true;
-      console.log(`[Audio] Ambient space soundscape loaded (${this.audioBuffer.duration.toFixed(1)}s, ${this.audioBuffer.numberOfChannels}ch).`);
-
-      // If unlocked and not muted, begin playing
-      if (this.isUnlocked && !this.isMuted) {
-        this.play();
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        if (this.audioCtx) {
+          this.audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
+        }
       }
     } catch (err) {
-      console.warn('[Audio] Failed to load WAV, engaging procedural ambient fallback:', err.message);
-      this._setupProceduralFallback();
+      console.warn('[Audio] Web Audio buffer decoding notice:', err.message);
     }
-  }
-
-  /**
-   * Procedural synthesizer fallback in case the WAV asset fails to load.
-   */
-  _setupProceduralFallback() {
-    this._ensureAudioContext();
-    if (!this.audioCtx) return;
-
-    // Create 4-chord procedural ambient oscillators
-    const chords = [
-      [73.42, 110.00, 146.83, 174.61, 220.00], // Dm9
-      [58.27, 87.31, 116.54, 146.83, 220.00],  // Bbmaj7
-      [65.41, 98.00, 130.81, 174.61, 196.00],  // Fsus2
-      [55.00, 82.41, 98.00, 146.83, 220.00],   // Gm9
-    ];
-
-    const subOsc = this.audioCtx.createOscillator();
-    subOsc.type = 'sine';
-    subOsc.frequency.setValueAtTime(36.71, this.audioCtx.currentTime); // D1
-
-    const subGain = this.audioCtx.createGain();
-    subGain.gain.setValueAtTime(0.2, this.audioCtx.currentTime);
-    subOsc.connect(subGain);
-    subGain.connect(this.filterNode);
-    subOsc.start();
-
-    // Lush polyphonic drone
-    const chordGains = [];
-    chords[0].forEach((freq) => {
-      const osc = this.audioCtx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-      const g = this.audioCtx.createGain();
-      g.gain.setValueAtTime(0.06, this.audioCtx.currentTime);
-      osc.connect(g);
-      g.connect(this.filterNode);
-      osc.start();
-      chordGains.push({ osc, g });
-    });
 
     this.isLoaded = true;
-    if (this.isUnlocked && !this.isMuted) {
-      this._fadeIn();
+
+    // Sound is ON by default: begin playing immediately (or upon first gesture)
+    if (!this.isMuted) {
+      this.play().catch(() => {
+        // Will activate automatically on first gesture
+      });
     }
   }
 
   /**
    * Starts playback of the ambient soundscape with smooth fade-in.
    */
-  play() {
+  async play() {
     this._ensureAudioContext();
-    if (!this.audioCtx) return;
 
-    if (this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
-    }
-
-    if (this.audioBuffer && (!this.sourceNode || !this.isPlaying)) {
-      if (this.sourceNode) {
-        try { this.sourceNode.stop(); } catch (e) { /* ignore */ }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      try {
+        await this.audioCtx.resume();
+      } catch (e) {
+        // Continue
       }
-      this.sourceNode = this.audioCtx.createBufferSource();
-      this.sourceNode.buffer = this.audioBuffer;
-      this.sourceNode.loop = true;
-      this.sourceNode.connect(this.filterNode);
-      this.sourceNode.start(0);
     }
 
     this.isPlaying = true;
     this.isMuted = false;
     this._savePreferences();
+
+    // 1. Play HTML5 Audio element
+    if (this.audioEl) {
+      try {
+        this.audioEl.volume = this.targetVolume;
+        this.audioEl.loop = true;
+        const playPromise = this.audioEl.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
+      } catch (err) {
+        console.warn('[Audio] HTML5 audio play notice:', err.message);
+      }
+    }
+
+    // 2. Play Web Audio source node if audioEl is not active or as secondary
+    if (!this.audioEl && this.audioBuffer && (!this.sourceNode || !this.isPlaying)) {
+      if (this.sourceNode) {
+        try { this.sourceNode.stop(); } catch (e) {}
+      }
+      if (this.audioCtx) {
+        this.sourceNode = this.audioCtx.createBufferSource();
+        this.sourceNode.buffer = this.audioBuffer;
+        this.sourceNode.loop = true;
+        this.sourceNode.connect(this.filterNode);
+        this.sourceNode.start(0);
+      }
+    }
+
     this._fadeIn();
     this._notify();
   }
@@ -203,6 +216,13 @@ export class AmbientAudioController {
   pause() {
     this.isMuted = true;
     this._savePreferences();
+
+    if (this.audioEl) {
+      try {
+        this.audioEl.pause();
+      } catch (e) {}
+    }
+
     this._fadeOut(() => {
       this.isPlaying = false;
       this._notify();
@@ -232,6 +252,11 @@ export class AmbientAudioController {
   setVolume(vol) {
     this.targetVolume = Math.max(0, Math.min(1, vol));
     this._savePreferences();
+
+    if (this.audioEl) {
+      this.audioEl.volume = this.targetVolume;
+    }
+
     if (this.audioCtx && this.masterGain && this.isPlaying && !this.isMuted) {
       const now = this.audioCtx.currentTime;
       this.masterGain.gain.cancelScheduledValues(now);
@@ -240,59 +265,88 @@ export class AmbientAudioController {
     this._notify();
   }
 
-  _fadeIn(duration = 2.5) {
+  _fadeIn(duration = 2.0) {
     if (!this.audioCtx || !this.masterGain) return;
-    const now = this.audioCtx.currentTime;
-    const currentGain = this.masterGain.gain.value;
-    this.masterGain.gain.cancelScheduledValues(now);
-    this.masterGain.gain.setValueAtTime(currentGain, now);
-    this.masterGain.gain.linearRampToValueAtTime(this.targetVolume, now + duration);
+    try {
+      const now = this.audioCtx.currentTime;
+      const currentGain = this.masterGain.gain.value;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.setValueAtTime(currentGain, now);
+      this.masterGain.gain.linearRampToValueAtTime(this.targetVolume, now + duration);
+    } catch (e) {}
   }
 
-  _fadeOut(callback, duration = 1.2) {
+  _fadeOut(callback, duration = 1.0) {
     if (!this.audioCtx || !this.masterGain) {
       if (callback) callback();
       return;
     }
-    const now = this.audioCtx.currentTime;
-    const currentGain = this.masterGain.gain.value;
-    this.masterGain.gain.cancelScheduledValues(now);
-    this.masterGain.gain.setValueAtTime(currentGain, now);
-    this.masterGain.gain.linearRampToValueAtTime(0.0001, now + duration);
-    setTimeout(() => {
-      if (this.isMuted && this.masterGain) {
-        this.masterGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
-      }
+    try {
+      const now = this.audioCtx.currentTime;
+      const currentGain = this.masterGain.gain.value;
+      this.masterGain.gain.cancelScheduledValues(now);
+      this.masterGain.gain.setValueAtTime(currentGain, now);
+      this.masterGain.gain.linearRampToValueAtTime(0.0001, now + duration);
+      setTimeout(() => {
+        if (this.isMuted && this.masterGain) {
+          this.masterGain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+        }
+        if (callback) callback();
+      }, duration * 1000 + 50);
+    } catch (e) {
       if (callback) callback();
-    }, duration * 1000 + 50);
+    }
   }
 
   /**
-   * Unlocks audio context on user interaction.
+   * Unlocks audio context on user interaction (iOS/iPadOS compliant).
    */
-  unlock() {
+  async unlock() {
     this.isUnlocked = true;
     this._ensureAudioContext();
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+
+    if (this.audioCtx) {
+      if (this.audioCtx.state === 'suspended') {
+        try {
+          await this.audioCtx.resume();
+        } catch (e) {}
+      }
+
+      // iOS WebKit silent buffer trigger to open the hardware output pipe
+      try {
+        const buf = this.audioCtx.createBuffer(1, 1, 22050);
+        const src = this.audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this.audioCtx.destination);
+        src.start(0);
+      } catch (e) {}
     }
-    if (!this.isPlaying && !this.isMuted && this.isLoaded) {
-      this.play();
+
+    if (!this.isPlaying && !this.isMuted) {
+      await this.play();
     }
   }
 
+  /**
+   * Configures persistent user interaction listeners across all mobile/tablet/desktop platforms.
+   */
   _setupAutoplayUnlock() {
-    const unlockHandler = () => {
-      this.unlock();
-      // Remove listeners once unlocked
-      window.removeEventListener('pointerdown', unlockHandler);
-      window.removeEventListener('touchstart', unlockHandler);
-      window.removeEventListener('keydown', unlockHandler);
+    const events = ['click', 'touchend', 'touchstart', 'pointerdown', 'pointerup', 'keydown', 'wheel'];
+
+    const unlockHandler = async () => {
+      await this.unlock();
+      // Remove listeners once audio is actively playing or audio context is running
+      if (
+        this.isPlaying ||
+        (this.audioCtx && this.audioCtx.state === 'running') ||
+        (this.audioEl && !this.audioEl.paused)
+      ) {
+        events.forEach(evt => window.removeEventListener(evt, unlockHandler));
+      }
     };
 
-    window.addEventListener('pointerdown', unlockHandler, { once: true, passive: true });
-    window.addEventListener('touchstart', unlockHandler, { once: true, passive: true });
-    window.addEventListener('keydown', unlockHandler, { once: true, passive: true });
+    // User gesture triggers across all platforms (Desktop, Mobile, iPad, Tablet)
+    events.forEach(evt => window.addEventListener(evt, unlockHandler, { passive: true }));
   }
 
   /**
@@ -300,22 +354,34 @@ export class AmbientAudioController {
    * @returns {{ level: number, bars: number[] }}
    */
   getVisualizerData() {
-    if (!this.analyser || !this.isPlaying || this.isMuted || !this.audioCtx || this.audioCtx.state !== 'running') {
+    if (!this.isPlaying || this.isMuted) {
       return { level: 0, bars: [0.15, 0.1, 0.2, 0.12] };
     }
 
-    this.analyser.getByteFrequencyData(this.analyserData);
+    if (this.analyser && this.audioCtx && this.audioCtx.state === 'running') {
+      try {
+        this.analyser.getByteFrequencyData(this.analyserData);
+        const b0 = (this.analyserData[1] || 0) / 255;
+        const b1 = (this.analyserData[3] || 0) / 255;
+        const b2 = (this.analyserData[7] || 0) / 255;
+        const b3 = (this.analyserData[14] || 0) / 255;
+        const avg = (b0 + b1 + b2 + b3) / 4;
+        return {
+          level: avg,
+          bars: [b0, b1, b2, b3],
+        };
+      } catch (e) {}
+    }
 
-    // Sample 4 distinct frequency bands: Sub/Bass, Low-Mid, High-Mid, Presence
-    const b0 = (this.analyserData[1] || 0) / 255;
-    const b1 = (this.analyserData[3] || 0) / 255;
-    const b2 = (this.analyserData[7] || 0) / 255;
-    const b3 = (this.analyserData[14] || 0) / 255;
-
-    const avg = (b0 + b1 + b2 + b3) / 4;
+    // Lively fallback bars while HTML5 audio plays
+    const t = performance.now() * 0.003;
+    const s0 = 0.3 + 0.2 * Math.sin(t * 1.5);
+    const s1 = 0.4 + 0.3 * Math.cos(t * 2.1);
+    const s2 = 0.5 + 0.25 * Math.sin(t * 2.7);
+    const s3 = 0.35 + 0.2 * Math.cos(t * 1.8);
     return {
-      level: avg,
-      bars: [b0, b1, b2, b3],
+      level: (s0 + s1 + s2 + s3) / 4,
+      bars: [s0, s1, s2, s3],
     };
   }
 

@@ -1,5 +1,6 @@
 // src/environment/mobileRobots.js — Autonomous R2-D2 & ISRO Pragyan Moon Rover Roaming the Atrium
 import * as THREE from 'three';
+import { createRobotTelemetry } from './robotTelemetry.js';
 
 /**
  * Builds and initializes autonomous R2-D2 and India's Pragyan Moon Rover.
@@ -7,12 +8,18 @@ import * as THREE from 'three';
  * discover each other, stop, and interact for 2 to 3 seconds.
  *
  * @param {THREE.Scene} scene
- * @returns {{ update: Function, r2d2: THREE.Group, pragyan: THREE.Group }}
+ * @param {THREE.Camera} [camera]
+ * @returns {{ update: Function, r2d2: THREE.Group, pragyan: THREE.Group, telemetry: Object, selectRobot: Function }}
  */
-export function buildMobileRobots(scene) {
+export function buildMobileRobots(scene, camera, controls = null) {
   const robotsGroup = new THREE.Group();
   robotsGroup.name = 'MobileRobotsFleet';
   scene.add(robotsGroup);
+
+  // ═════════════════════════════════════════════════════════
+  // 0. REAL-TIME ROBOT TELEMETRY SYSTEM
+  // ═════════════════════════════════════════════════════════
+  const telemetry = createRobotTelemetry(scene, camera, controls);
 
   // ═════════════════════════════════════════════════════════
   // 1. R2-D2 ASTROMECH DROID BUILDER
@@ -61,6 +68,16 @@ export function buildMobileRobots(scene) {
   bodyMesh.position.y = bodyCenterY;
   bodyMesh.castShadow = true;
   r2Group.add(bodyMesh);
+
+  // Invisible larger hit mesh for raycasting & touch selection
+  const r2HitMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.38, 0.38, 0.95, 16),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  r2HitMesh.position.y = 0.45;
+  r2HitMesh.name = 'HitMesh_R2D2';
+  r2HitMesh.userData = { isRobot: true, robotKey: 'R2D2' };
+  r2Group.add(r2HitMesh);
 
   // Body Blue Panels & Vents
   for (let i = 0; i < 4; i++) {
@@ -308,6 +325,16 @@ export function buildMobileRobots(scene) {
   chassis.position.y = 0.26;
   chassis.castShadow = true;
   pragyanGroup.add(chassis);
+
+  // Invisible larger hit box for raycasting & touch selection
+  const pragyanHitMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.72, 0.65, 0.88),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  pragyanHitMesh.position.y = 0.36;
+  pragyanHitMesh.name = 'HitMesh_Pragyan';
+  pragyanHitMesh.userData = { isRobot: true, robotKey: 'Pragyan' };
+  pragyanGroup.add(pragyanHitMesh);
 
   // Top Equipment Deck
   const deckPlate = new THREE.Mesh(
@@ -686,7 +713,100 @@ export function buildMobileRobots(scene) {
       navCamHead.rotation.y = Math.sin(elapsed * 1.5) * 0.15;
       pragyanLedMat.color.setHex(Math.sin(elapsed * 3.0) > 0 ? 0x10b981 : 0x054020);
     }
+
+    // 3. Update Real-Time Robot Telemetry Card (Continuously follows active robot)
+    telemetry.update(clampedDt);
   };
+
+  // ═════════════════════════════════════════════════════════
+  // TOUCH & CLICK RAYCASTING HANDLER FOR AUTONOMOUS ROBOTS
+  // ═════════════════════════════════════════════════════════
+  const interactiveRobots = [r2HitMesh, pragyanHitMesh, r2Group, pragyanGroup];
+  const raycaster = new THREE.Raycaster();
+  const pointerPos = new THREE.Vector2();
+  let pointerDownPos = { x: 0, y: 0, time: 0 };
+
+  const handlePointerDown = (e) => {
+    pointerDownPos = {
+      x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
+      y: e.clientY ?? e.touches?.[0]?.clientY ?? 0,
+      time: performance.now(),
+    };
+  };
+
+  const handlePointerUp = (e) => {
+    if (!camera) return;
+    const upX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? 0;
+    const upY = e.clientY ?? e.changedTouches?.[0]?.clientY ?? 0;
+    const dist = Math.hypot(upX - pointerDownPos.x, upY - pointerDownPos.y);
+    const elapsed = performance.now() - pointerDownPos.time;
+
+    // Filter out drags or long presses
+    if (dist > 14 || elapsed > 650) return;
+
+    // Ignore clicks inside HUD panels or UI buttons
+    if (
+      e.target &&
+      (e.target.closest('#robot-telemetry-hud') ||
+        e.target.closest('#celestial-telemetry-hud') ||
+        e.target.closest('#rocket-telemetry-hud') ||
+        e.target.closest('#hud-container') ||
+        e.target.closest('.hud-panel') ||
+        e.target.closest('button') ||
+        e.target.closest('input'))
+    ) {
+      return;
+    }
+
+    pointerPos.x = (upX / window.innerWidth) * 2 - 1;
+    pointerPos.y = -(upY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointerPos, camera);
+    const hits = raycaster.intersectObjects(interactiveRobots, true);
+
+    if (hits.length > 0) {
+      // Find which robot was hit
+      let hitKey = null;
+      let hitGrp = null;
+      for (const h of hits) {
+        let obj = h.object;
+        while (obj) {
+          if (obj.userData?.robotKey) {
+            hitKey = obj.userData.robotKey;
+            hitGrp = hitKey === 'Pragyan' ? pragyanGroup : r2Group;
+            break;
+          }
+          if (obj === r2Group) {
+            hitKey = 'R2D2';
+            hitGrp = r2Group;
+            break;
+          }
+          if (obj === pragyanGroup) {
+            hitKey = 'Pragyan';
+            hitGrp = pragyanGroup;
+            break;
+          }
+          obj = obj.parent;
+        }
+        if (hitKey) break;
+      }
+
+      if (hitKey && hitGrp) {
+        if (telemetry.getCurrentTarget()?.dataKey === hitKey) {
+          telemetry.deselect();
+        } else {
+          telemetry.selectRobot(hitGrp, hitKey);
+        }
+      }
+    } else {
+      if (telemetry.getCurrentTarget()) {
+        telemetry.deselect();
+      }
+    }
+  };
+
+  window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+  window.addEventListener('pointerup', handlePointerUp, { passive: true });
 
   /**
    * Helper to manually trigger an immediate mutual interaction sequence.
@@ -715,7 +835,11 @@ export function buildMobileRobots(scene) {
     pragyan: pragyanGroup,
     r2State,
     pragyanState,
+    telemetry,
     update,
     triggerInteraction,
+    setControls: (ctrls) => telemetry.setControls(ctrls),
+    selectRobot: (key) => telemetry.selectRobot(key === 'Pragyan' ? pragyanGroup : r2Group, key),
+    deselect: () => telemetry.deselect(),
   };
 }

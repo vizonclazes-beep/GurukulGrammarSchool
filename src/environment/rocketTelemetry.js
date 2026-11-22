@@ -1,6 +1,6 @@
 // src/environment/rocketTelemetry.js — Rich Aerospace Datasets & Interactive Telemetry UI for Rockets
 import * as THREE from 'three';
-import { isMobileOrTablet } from '../ui/deviceOrientation.js';
+import { isMobileOrTablet, getViewportRoot } from '../ui/deviceOrientation.js';
 
 export const ROCKET_DATA = {
   // ── ISRO OPERATIONAL ──
@@ -405,8 +405,9 @@ export function createRocketTelemetry(parentGroup, camera) {
             bottom: 74px;
             left: 12px;
             right: 12px;
+            top: auto;
             width: auto;
-            max-width: calc(100vw - 24px);
+            max-width: calc(100% - 24px);
             max-height: 52vh;
             padding: 16px 18px;
             border-radius: 16px;
@@ -428,17 +429,17 @@ export function createRocketTelemetry(parentGroup, camera) {
           }
         }
 
-        /* ── LANDSCAPE MODE (Phones, Tablets & iPads) ──
+        /* ── LANDSCAPE MODE (Phones, Tablets & iPads — Native & Virtual Rotation) ──
            Adapts into a landscape side-drawer on the right, keeping center and left open for the rocket */
-        @media (orientation: landscape) and (max-height: 850px) {
+        @media (orientation: landscape) {
           #rocket-telemetry-hud {
             top: 12px;
             bottom: 58px;
             right: -520px;
             left: auto;
             width: 440px;
-            max-width: calc(100vw - 80px);
-            max-height: calc(100vh - 70px);
+            max-width: calc(100% - 80px);
+            max-height: calc(100% - 70px);
             padding: 14px 18px;
             border-radius: 14px;
             transform: none;
@@ -457,6 +458,31 @@ export function createRocketTelemetry(parentGroup, camera) {
             padding: 8px 12px;
             margin-bottom: 12px;
           }
+        }
+
+        body.vz-orientation-landscape #rocket-telemetry-hud {
+          top: 12px;
+          bottom: 58px;
+          right: -520px;
+          left: auto;
+          width: 440px;
+          max-width: calc(100% - 80px);
+          max-height: calc(100% - 70px);
+          padding: 14px 18px;
+          border-radius: 14px;
+          transform: none;
+          transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+        }
+        body.vz-orientation-landscape #rocket-telemetry-hud.active {
+          right: 14px;
+          opacity: 1;
+        }
+        body.vz-orientation-landscape .rkt-grid {
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 6px 10px;
+          padding: 8px 12px;
+          margin-bottom: 12px;
+        }
           .rkt-section {
             margin-bottom: 10px;
           }
@@ -628,7 +654,8 @@ export function createRocketTelemetry(parentGroup, camera) {
         <div class="rkt-sec-body" id="rkt-description">...</div>
       </div>
     `;
-    document.body.appendChild(hudContainer);
+    const root = getViewportRoot();
+    root.appendChild(hudContainer);
 
     document.getElementById('rkt-close-btn')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -865,6 +892,13 @@ export function createRocketTelemetry(parentGroup, camera) {
   function selectRocket(mesh, rocketId) {
     const data = ROCKET_DATA[rocketId];
     if (!data) return;
+
+    // Deselect other telemetry systems to maintain clean uncluttered UI
+    if (typeof window !== 'undefined' && window.__sim) {
+      window.__sim.scientistTelemetry?.deselect();
+      window.__sim.astroCtx?.telemetry?.deselect();
+      window.__sim.mobileRobots?.telemetry?.deselect();
+    }
 
     activeRocket = data;
     activeMesh = mesh;

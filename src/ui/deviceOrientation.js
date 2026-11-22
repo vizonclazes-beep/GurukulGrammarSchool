@@ -10,6 +10,15 @@ const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2
 const qYaw = new THREE.Quaternion();
 
 /**
+ * Returns the viewport root wrapper element (used for physical rotation & UI docking).
+ * @returns {HTMLElement}
+ */
+export function getViewportRoot() {
+  if (typeof document === 'undefined') return null;
+  return document.getElementById('vz-viewport-root') || document.body;
+}
+
+/**
  * Detects if the current device is an iPad (including modern iPadOS reporting as Macintosh).
  * @returns {boolean}
  */
@@ -37,19 +46,20 @@ export function isMobileOrTablet() {
 }
 
 /**
- * Checks if current viewport or device is in landscape mode.
+ * Checks if current viewport or device is natively in landscape mode.
  * @returns {boolean}
  */
 export function isLandscape() {
   if (typeof window === 'undefined') return false;
+  if (window.innerWidth > window.innerHeight) return true;
   if (window.screen && window.screen.orientation && window.screen.orientation.type) {
     return window.screen.orientation.type.includes('landscape');
   }
-  return window.innerWidth > window.innerHeight;
+  return false;
 }
 
 /**
- * Gets current screen orientation angle in degrees (0, 90, 180, 270).
+ * Gets current OS screen orientation angle in degrees (0, 90, 180, 270).
  * Handles iOS/iPadOS window.orientation as well as modern screen.orientation.angle.
  * @returns {number}
  */
@@ -64,19 +74,95 @@ export function getScreenOrientation() {
   return 0;
 }
 
+// ── PHYSICAL GRAVITY ORIENTATION SENSING (WORKS EVEN WITH PORTRAIT LOCK) ──
+let physicalOrientation = 0; // 0 (portrait), 90 (landscape CCW), -90 (landscape CW), 180 (inverted)
+const orientationChangeCallbacks = new Set();
+
+/**
+ * Subscribe to physical orientation updates.
+ * @param {Function} cb
+ * @returns {Function} Unsubscribe
+ */
+export function onOrientationChange(cb) {
+  orientationChangeCallbacks.add(cb);
+  return () => orientationChangeCallbacks.delete(cb);
+}
+
+export function getPhysicalOrientation() {
+  return physicalOrientation;
+}
+
+/**
+ * Checks if the device is physically held in landscape while the OS screen is locked in portrait.
+ * @returns {boolean}
+ */
+export function isLockedInPortrait() {
+  if (typeof window === 'undefined') return false;
+  const isPhysLand = Math.abs(physicalOrientation) === 90;
+  const isViewportPortrait = window.innerWidth < window.innerHeight;
+  return isPhysLand && isViewportPortrait;
+}
+
+/**
+ * Checks if device is either natively in landscape OR physically held in landscape.
+ * @returns {boolean}
+ */
+export function isEffectiveLandscape() {
+  if (typeof window === 'undefined') return false;
+  if (isLandscape()) return true;
+  return Math.abs(physicalOrientation) === 90;
+}
+
 /**
  * Updates responsive classes on document.body to support universal landscape/portrait
- * styling for all cards, panels, and drawers across mobile phones, tablets, and iPads.
+ * styling for all cards, panels, and drawers across mobile phones, tablets, and iPads,
+ * including virtual rotation when locked in portrait.
  */
 export function updateDeviceOrientationClasses() {
   if (typeof document === 'undefined' || !document.body) return;
   const isMob = isMobileOrTablet();
-  const isLand = isLandscape();
+  const isEffLand = isEffectiveLandscape();
+  const lockedPortrait = isLockedInPortrait();
 
   document.body.classList.toggle('vz-mobile-tablet', isMob);
   document.body.classList.toggle('vz-desktop', !isMob);
-  document.body.classList.toggle('vz-orientation-landscape', isLand);
-  document.body.classList.toggle('vz-orientation-portrait', !isLand);
+  document.body.classList.toggle('vz-orientation-landscape', isEffLand);
+  document.body.classList.toggle('vz-orientation-portrait', !isEffLand);
+
+  // Virtual rotation classes when physical device is turned into landscape but locked in portrait
+  const lockCCW = lockedPortrait && physicalOrientation === 90;
+  const lockCW = lockedPortrait && physicalOrientation === -90;
+  document.body.classList.toggle('vz-locked-landscape-ccw', lockCCW);
+  document.body.classList.toggle('vz-locked-landscape-cw', lockCW);
+
+  for (const cb of orientationChangeCallbacks) {
+    try { cb(); } catch (e) { /* ignore */ }
+  }
+}
+
+// Global accelerometer listener to detect gravity vector (physical orientation)
+if (typeof window !== 'undefined') {
+  window.addEventListener('devicemotion', (event) => {
+    const acc = event.accelerationIncludingGravity;
+    if (!acc) return;
+    const x = acc.x ?? 0;
+    const y = acc.y ?? 0;
+
+    // If device is flat on a surface (x^2 + y^2 is tiny), keep previous orientation
+    if (Math.hypot(x, y) < 2.5) return;
+
+    let newOrient = physicalOrientation;
+    if (Math.abs(x) > Math.abs(y) + 1.2) {
+      newOrient = x > 0 ? 90 : -90;
+    } else if (Math.abs(y) > Math.abs(x) + 1.2) {
+      newOrient = y < 0 ? 0 : 180;
+    }
+
+    if (newOrient !== physicalOrientation) {
+      physicalOrientation = newOrient;
+      updateDeviceOrientationClasses();
+    }
+  }, { passive: true });
 }
 
 // Initial invocation on load
@@ -159,19 +245,31 @@ export class DeviceOrientationManager {
 
     // Touch swipe horizontal yaw offset (allows user to swipe to turn while gyro is active)
     let touchStartX = 0;
+    let touchStartY = 0;
     let isSwiping = false;
 
     window.addEventListener('touchstart', (e) => {
       if (e.touches && e.touches.length === 1) {
         touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
         isSwiping = true;
       }
     }, { passive: true });
 
     window.addEventListener('touchmove', (e) => {
       if (isSwiping && this.enabled && e.touches && e.touches.length === 1) {
-        const dx = e.touches[0].clientX - touchStartX;
+        let dx = e.touches[0].clientX - touchStartX;
+        let dy = e.touches[0].clientY - touchStartY;
         touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+
+        // In virtual portrait-lock landscape mode, map coordinates to user's horizontal axis
+        if (document.body && document.body.classList.contains('vz-locked-landscape-ccw')) {
+          dx = dy;
+        } else if (document.body && document.body.classList.contains('vz-locked-landscape-cw')) {
+          dx = -dy;
+        }
+
         // Sensitivity factor in radians per pixel
         this.yawOffset -= dx * 0.0035;
       }
@@ -217,7 +315,8 @@ export class DeviceOrientationManager {
   _calibrateHeading() {
     if (this.rawAlpha === null) return;
     const tempQuat = new THREE.Quaternion();
-    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, this.screenOrientation, tempQuat);
+    const effOrient = isLockedInPortrait() ? 0 : this.screenOrientation;
+    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, effOrient, tempQuat);
 
     // Forward direction of sensor orientation projected on horizontal XZ plane
     const deviceForward = new THREE.Vector3(0, 0, -1).applyQuaternion(tempQuat);
@@ -237,6 +336,21 @@ export class DeviceOrientationManager {
     const inAlpha = event.alpha;
     const inBeta = event.beta ?? 90;
     const inGamma = event.gamma ?? 0;
+
+    // Physical orientation backup check from beta/gamma
+    if (Math.abs(inGamma) > 42 && Math.abs(inBeta) < 55) {
+      const newOrient = inGamma < 0 ? 90 : -90;
+      if (newOrient !== physicalOrientation) {
+        physicalOrientation = newOrient;
+        updateDeviceOrientationClasses();
+      }
+    } else if (Math.abs(inBeta) > 42 && Math.abs(inGamma) < 35) {
+      const newOrient = inBeta > 0 ? 0 : 180;
+      if (newOrient !== physicalOrientation) {
+        physicalOrientation = newOrient;
+        updateDeviceOrientationClasses();
+      }
+    }
 
     // Calibrate initial heading on first valid sensor reading so user starts seamlessly facing current view
     if (!this.initialHeadingCalibrated || this.rawAlpha === null) {
@@ -370,7 +484,10 @@ export class DeviceOrientationManager {
   update(dt = 0.016) {
     if (!this.enabled || !this.hasSensorData || this.rawAlpha === null) return;
 
-    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, this.screenOrientation, this.targetQuat);
+    // When virtual rotation is active, the CSS transform rotates the canvas frame,
+    // so orient angle relative to the canvas is 0.
+    const effOrient = isLockedInPortrait() ? 0 : this.screenOrientation;
+    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, effOrient, this.targetQuat);
 
     // Apply horizontal yaw offset from initial calibration & touch swipe panning
     if (this.yawOffset !== 0) {
@@ -389,8 +506,6 @@ export class DeviceOrientationManager {
     // Smooth slerp to eliminate sensor jitter
     const slerpFactor = Math.min(1.0, dt * 18.0);
     this.camera.quaternion.slerp(this.targetQuat, slerpFactor);
-
-    // Notice: camera.position is NEVER modified by gyro, preventing forward/backward jumping!
   }
 
   _injectStyles() {
@@ -484,7 +599,8 @@ export class DeviceOrientationManager {
       this.toggle();
     });
 
-    document.body.appendChild(btn);
+    const root = getViewportRoot();
+    root.appendChild(btn);
     this._uiBtn = btn;
   }
 

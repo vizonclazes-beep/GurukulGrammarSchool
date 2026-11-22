@@ -420,9 +420,11 @@ export function renderExhibitCanvas(scientist, imgElement = null) {
  * Each plaque features the authentic photographic portrait and large bold name of a scientist,
  * operable in an interactive carousel format upon clicking.
  * @param {THREE.Group} parentGroup
- * @returns {{ exhibits: Array, nextSlide: Function }}
+ * @param {Object} [scientistTelemetry]
+ * @param {THREE.Camera} [camera]
+ * @returns {{ exhibits: Array, selectScientist: Function }}
  */
-export function buildWallExhibits(parentGroup) {
+export function buildWallExhibits(parentGroup, scientistTelemetry, camera) {
   const exhibitsGroup = new THREE.Group();
   exhibitsGroup.name = 'ScientistMuseumExhibits';
   parentGroup.add(exhibitsGroup);
@@ -435,6 +437,7 @@ export function buildWallExhibits(parentGroup) {
   const frameWidth = frameHeight * (1400 / 1640); // 2.936m, perfectly proportioned
 
   const exhibits = [];
+  const interactiveExhibits = [];
 
   // Brushed aluminum bezel frame material
   const frameBezelMat = new THREE.MeshPhysicalMaterial({
@@ -522,7 +525,25 @@ export function buildWallExhibits(parentGroup) {
 
     const plaqueMesh = new THREE.Mesh(plaqueGeo, plaqueMat);
     plaqueMesh.position.set(0, 0, 0.025);
+    plaqueMesh.name = `ScientistPlaque_${currentScientist.id}`;
+    plaqueMesh.userData = {
+      isScientistPlaque: true,
+      scientistId: currentScientist.id,
+      exhibitAnchor,
+    };
     exhibitAnchor.add(plaqueMesh);
+
+    // Invisible larger hit mesh for clicking and touching on mobile/desktop
+    const hitGeo = new THREE.BoxGeometry(frameWidth * 1.05, frameHeight * 1.05, 0.35);
+    const hitMesh = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({ visible: false }));
+    hitMesh.name = `HitMesh_${currentScientist.id}`;
+    hitMesh.userData = {
+      isScientistPlaque: true,
+      scientistId: currentScientist.id,
+      exhibitAnchor,
+    };
+    exhibitAnchor.add(hitMesh);
+    interactiveExhibits.push(hitMesh, plaqueMesh);
 
     const redraw = (newIdx) => {
       currentScientistIdx = (newIdx + SCIENTISTS_DATA.length) % SCIENTISTS_DATA.length;
@@ -544,12 +565,99 @@ export function buildWallExhibits(parentGroup) {
       get currentScientistIdx() {
         return currentScientistIdx;
       },
+      anchor: exhibitAnchor,
       mesh: plaqueMesh,
       texture,
       redraw,
     });
   }
 
-  // The exhibits are permanently mounted and fixed per window (will not change when clicked)
-  return { exhibits };
+  // ═════════════════════════════════════════════════════════
+  // TOUCH & CLICK RAYCASTING HANDLER FOR SCIENTIST EXHIBITS
+  // ═════════════════════════════════════════════════════════
+  const raycaster = new THREE.Raycaster();
+  const pointerPos = new THREE.Vector2();
+  let pointerDownPos = { x: 0, y: 0, time: 0 };
+
+  const handlePointerDown = (e) => {
+    pointerDownPos = {
+      x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
+      y: e.clientY ?? e.touches?.[0]?.clientY ?? 0,
+      time: performance.now(),
+    };
+  };
+
+  const handlePointerUp = (e) => {
+    if (!camera || !scientistTelemetry) return;
+    const upX = e.clientX ?? e.changedTouches?.[0]?.clientX ?? 0;
+    const upY = e.clientY ?? e.changedTouches?.[0]?.clientY ?? 0;
+    const dist = Math.hypot(upX - pointerDownPos.x, upY - pointerDownPos.y);
+    const elapsed = performance.now() - pointerDownPos.time;
+
+    // Filter out drags or long presses
+    if (dist > 14 || elapsed > 650) return;
+
+    // Ignore clicks inside HUD panels or UI buttons
+    if (
+      e.target &&
+      (e.target.closest('#scientist-telemetry-hud') ||
+        e.target.closest('#rocket-telemetry-hud') ||
+        e.target.closest('#celestial-telemetry-hud') ||
+        e.target.closest('#robot-telemetry-hud') ||
+        e.target.closest('#hud-container') ||
+        e.target.closest('.hud-panel') ||
+        e.target.closest('button') ||
+        e.target.closest('input'))
+    ) {
+      return;
+    }
+
+    pointerPos.x = (upX / window.innerWidth) * 2 - 1;
+    pointerPos.y = -(upY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointerPos, camera);
+    const hits = raycaster.intersectObjects(interactiveExhibits, true);
+
+    if (hits.length > 0) {
+      let hitId = null;
+      let hitAnchor = null;
+      for (const h of hits) {
+        let obj = h.object;
+        while (obj) {
+          if (obj.userData?.isScientistPlaque) {
+            hitId = obj.userData.scientistId;
+            hitAnchor = obj.userData.exhibitAnchor;
+            break;
+          }
+          obj = obj.parent;
+        }
+        if (hitId) break;
+      }
+
+      if (hitId && hitAnchor) {
+        if (scientistTelemetry.getActiveScientist()?.id === hitId) {
+          scientistTelemetry.deselect();
+        } else {
+          scientistTelemetry.selectScientist(hitAnchor, hitId);
+        }
+      }
+    } else {
+      if (scientistTelemetry.getActiveScientist()) {
+        scientistTelemetry.deselect();
+      }
+    }
+  };
+
+  window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+  window.addEventListener('pointerup', handlePointerUp, { passive: true });
+
+  return {
+    exhibits,
+    selectScientist: (id) => {
+      const found = exhibits.find((e) => e.scientist.id === id);
+      if (found && scientistTelemetry) {
+        scientistTelemetry.selectScientist(found.anchor, id);
+      }
+    },
+  };
 }

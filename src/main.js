@@ -19,6 +19,7 @@ import { buildAstronomyRoboticsHub } from './stations/astronomyRobotics.js';
 import { buildMobileRobots } from './environment/mobileRobots.js';
 import { createRocketTelemetry } from './environment/rocketTelemetry.js';
 import { buildRocketExhibits } from './environment/rocketModels.js';
+import { createScientistTelemetry } from './environment/scientistTelemetry.js';
 
 // Shader tick registries
 import { registerShaderTick } from './shaders/shaderRegistry.js';
@@ -70,8 +71,9 @@ async function init() {
   const pointerNDC = new THREE.Vector2();
 
   // ─── Build Scene ───
-  setLoadProgress(15, 'BUILDING ATRIUM…');
-  const atriumGroup = buildAtrium(scene, globalUniforms);
+  setLoadProgress(15, 'BUILDING ATRIUM & SCIENTIST EXHIBITS…');
+  const scientistTelemetry = createScientistTelemetry(scene, camera);
+  const atriumGroup = buildAtrium(scene, globalUniforms, scientistTelemetry, camera);
 
   setLoadProgress(25, 'CONFIGURING LIGHTING…');
   setupLighting(scene);
@@ -92,12 +94,13 @@ async function init() {
   const astroCtx = buildAstronomyRoboticsHub(scene, globalUniforms, camera);
 
   setLoadProgress(80, 'DEPLOYING AUTONOMOUS MOBILE ROBOTS (R2-D2 & PRAGYAN ROVER)…');
-  const mobileRobots = buildMobileRobots(scene);
+  const mobileRobots = buildMobileRobots(scene, camera);
 
   setLoadProgress(85, 'INITIALIZING CONTROLS…');
   const controls = setupControls(camera, renderer);
   const cameraAnim = animateCamera(camera, controls);
   const gyroManager = initDeviceOrientation(camera, controls);
+  mobileRobots.setControls(controls);
 
   setLoadProgress(90, 'BUILDING HUD…');
   const hud = buildHUD({
@@ -126,7 +129,7 @@ async function init() {
 
   // Expose for testing/debugging
   window.THREE = THREE;
-  window.__sim = { renderer, composer, camera, controls, cameraAnim, scene, gyroManager, astroCtx, mobileRobots, rocketTelemetry, rocketExhibits, ambientAudio, audioWidget };
+  window.__sim = { renderer, composer, camera, controls, cameraAnim, scene, gyroManager, astroCtx, mobileRobots, rocketTelemetry, rocketExhibits, scientistTelemetry, wallExhibits: atriumGroup.userData.wallExhibits, ambientAudio, audioWidget };
 
   // ─── Render Loop ───
   const shaderTicks = registerShaderTick.getAll();
@@ -171,6 +174,7 @@ async function init() {
     astroCtx.update?.(elapsed, dt, globalUniforms);
     mobileRobots.update?.(elapsed, dt, globalUniforms);
     rocketExhibits.update?.(elapsed, dt, globalUniforms);
+    scientistTelemetry.update?.(elapsed, dt);
 
     // Render
     composer.render();

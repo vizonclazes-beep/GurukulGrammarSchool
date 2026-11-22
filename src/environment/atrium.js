@@ -25,7 +25,7 @@ import { buildWallExhibits } from './scientistExhibits.js';
  * @param {Object} globalUniforms
  * @returns {THREE.Group}
  */
-export function buildAtrium(scene, globalUniforms) {
+export function buildAtrium(scene, globalUniforms, scientistTelemetry, camera) {
   const atriumGroup = new THREE.Group();
   atriumGroup.name = 'AtriumGroup';
   scene.add(atriumGroup);
@@ -43,7 +43,8 @@ export function buildAtrium(scene, globalUniforms) {
   createRadialWallPanels(atriumGroup);
 
   // ── 5. SCIENTIST MUSEUM EXHIBIT PLAQUES (CAROUSEL FORMAT IN ALCOVE WINDOWS) ──
-  buildWallExhibits(atriumGroup);
+  const wallExhibits = buildWallExhibits(atriumGroup, scientistTelemetry, camera);
+  atriumGroup.userData.wallExhibits = wallExhibits;
 
   // ── 6. MODULAR CEILING VAULT RIBS & COFFERED GRID ──
   createCeilingStructure(atriumGroup);

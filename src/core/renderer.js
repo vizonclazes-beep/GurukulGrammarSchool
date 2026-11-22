@@ -8,6 +8,7 @@ import {
   MAX_PIXEL_RATIO, BLOOM_THRESHOLD, BLOOM_STRENGTH, BLOOM_RADIUS,
   SHADOW_MAP_SIZE, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, SPAWN_POSITION
 } from './constants.js';
+import { onOrientationChange } from '../ui/deviceOrientation.js';
 
 export function createRenderer(container) {
   const renderer = new THREE.WebGLRenderer({
@@ -51,13 +52,37 @@ export function createComposer(renderer, scene, camera) {
 
 export function handleResize(renderer, camera, composer) {
   const onResize = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    let w = window.innerWidth;
+    let h = window.innerHeight;
+
+    // When virtual rotation is engaged due to portrait lock:
+    if (
+      typeof document !== 'undefined' &&
+      document.body &&
+      (document.body.classList.contains('vz-locked-landscape-ccw') ||
+       document.body.classList.contains('vz-locked-landscape-cw'))
+    ) {
+      w = Math.max(window.innerWidth, window.innerHeight);
+      h = Math.min(window.innerWidth, window.innerHeight);
+    }
+
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     composer.setSize(w, h);
   };
+
   window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', () => {
+    onResize();
+    setTimeout(onResize, 150);
+    setTimeout(onResize, 350);
+  });
+
+  // Also hook into physical gravity orientation change
+  onOrientationChange(() => {
+    onResize();
+  });
+
   return onResize;
 }

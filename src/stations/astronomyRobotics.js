@@ -4,6 +4,19 @@ import { stationPosition, COLOR_POD_WHITE } from '../core/constants.js';
 import { createAstronomyScreens } from './astronomyScreens.js';
 import { createSunAndFlares } from './sunAndFlares.js';
 import { createCelestialTelemetry, CELESTIAL_DATA } from './celestialTelemetry.js';
+import {
+  createMercuryTexture,
+  createVenusTexture,
+  createEarthSurfaceTexture,
+  createEarthCloudTexture,
+  createMarsTexture,
+  createJupiterTexture,
+  createSaturnTexture,
+  createSaturnRingTexture,
+  createUranusTexture,
+  createNeptuneTexture,
+} from './planetTextures.js';
+import { createComet } from './comet.js';
 
 /**
  * Builds the Astronomy Dome Orrery & Deep Space Observation Hub.
@@ -61,25 +74,135 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
   const sunSystem = createSunAndFlares(orreryGroup, globalUniforms);
   const sunMesh = sunSystem.sunMesh;
 
-  // Keplerian planetary orbital parameters: [name, distance, size, speedFactor, color]
-  // Orbital distances scaled so all 8 planets rotate well inside R <= 1.85m,
-  // guaranteeing a massive >0.53m clear buffer zone from the perimeter screens (R >= 2.38m)
+  // Keplerian planetary orbital parameters: realistic procedural textures, sizes and axial tilts
   const planetData = [
-    { name: 'Mercury', dist: 0.38, size: 0.035, speed: 4.15, color: 0x9e9e9e },
-    { name: 'Venus',   dist: 0.52, size: 0.052, speed: 1.62, color: 0xe6c280 },
-    { name: 'Earth',   dist: 0.68, size: 0.060, speed: 1.00, color: 0x3b82f6 },
-    { name: 'Mars',    dist: 0.84, size: 0.045, speed: 0.53, color: 0xef4444 },
-    { name: 'Jupiter', dist: 1.08, size: 0.105, speed: 0.24, color: 0xd97706, bands: true },
-    { name: 'Saturn',  dist: 1.34, size: 0.085, speed: 0.12, color: 0xfde047, ring: true },
-    { name: 'Uranus',  dist: 1.62, size: 0.065, speed: 0.06, color: 0x38bdf8 },
-    { name: 'Neptune', dist: 1.85, size: 0.060, speed: 0.03, color: 0x2563eb },
+    {
+      name: 'Mercury',
+      dist: 0.38,
+      size: 0.035,
+      speed: 4.15,
+      axialTilt: 0.001,
+      spinSpeed: 0.25,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createMercuryTexture(),
+          roughness: 0.88,
+          metalness: 0.05,
+        }),
+    },
+    {
+      name: 'Venus',
+      dist: 0.52,
+      size: 0.052,
+      speed: 1.62,
+      axialTilt: 3.09, // Retrograde rotation
+      spinSpeed: -0.18,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createVenusTexture(),
+          roughness: 0.42,
+          metalness: 0.02,
+        }),
+    },
+    {
+      name: 'Earth',
+      dist: 0.68,
+      size: 0.060,
+      speed: 1.00,
+      axialTilt: 0.41, // 23.4° tilt
+      spinSpeed: 0.75,
+      hasClouds: true,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createEarthSurfaceTexture(),
+          roughness: 0.52,
+          metalness: 0.08,
+        }),
+    },
+    {
+      name: 'Mars',
+      dist: 0.84,
+      size: 0.045,
+      speed: 0.53,
+      axialTilt: 0.44, // 25.2° tilt
+      spinSpeed: 0.70,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createMarsTexture(),
+          roughness: 0.82,
+          metalness: 0.04,
+        }),
+    },
+    {
+      name: 'Jupiter',
+      dist: 1.08,
+      size: 0.105,
+      speed: 0.24,
+      axialTilt: 0.054, // 3.1° tilt
+      spinSpeed: 1.4, // Rapid Jovian rotation
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createJupiterTexture(),
+          roughness: 0.54,
+          metalness: 0.02,
+        }),
+    },
+    {
+      name: 'Saturn',
+      dist: 1.34,
+      size: 0.085,
+      speed: 0.12,
+      axialTilt: 0.466, // 26.7° tilt
+      spinSpeed: 1.25,
+      hasRing: true,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createSaturnTexture(),
+          roughness: 0.55,
+          metalness: 0.02,
+        }),
+    },
+    {
+      name: 'Uranus',
+      dist: 1.62,
+      size: 0.065,
+      speed: 0.06,
+      axialTilt: 1.707, // 97.8° tilt (rotates on its side)
+      spinSpeed: 0.85,
+      hasRing: true,
+      isUranusRing: true,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createUranusTexture(),
+          roughness: 0.46,
+          metalness: 0.02,
+        }),
+    },
+    {
+      name: 'Neptune',
+      dist: 1.85,
+      size: 0.060,
+      speed: 0.03,
+      axialTilt: 0.494, // 28.3° tilt
+      spinSpeed: 0.90,
+      createMaterial: () =>
+        new THREE.MeshStandardMaterial({
+          map: createNeptuneTexture(),
+          roughness: 0.45,
+          metalness: 0.02,
+        }),
+    },
   ];
 
   const planets = [];
   const interactiveTargets = [sunSystem.hitMesh, sunMesh];
 
-  // Saturn ring alpha-gradient shader
+  // Enhanced Photorealistic Saturn Ring Shader with Cassini Division
+  const saturnRingTex = createSaturnRingTexture();
   const saturnRingMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uRingTex: { value: saturnRingTex },
+    },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       void main() {
@@ -88,45 +211,22 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
       }
     `,
     fragmentShader: /* glsl */ `
+      uniform sampler2D uRingTex;
       varying vec2 vUv;
       void main() {
-        float r = length(vUv - 0.5) * 2.0;
-        if (r < 0.4 || r > 1.0) discard;
-        float band = sin(r * 35.0) * 0.2 + 0.8;
-        float alpha = smoothstep(0.4, 0.5, r) * smoothstep(1.0, 0.85, r) * 0.85;
-        vec3 col = vec3(0.92, 0.82, 0.65) * band;
-        gl_FragColor = vec4(col, alpha);
+        float r = length(vUv - vec2(0.5)) * 2.0;
+        float innerR = 0.4737;
+        float outerR = 1.0;
+        if (r < innerR || r > outerR) discard;
+        float u = clamp((r - innerR) / (outerR - innerR), 0.0, 1.0);
+        vec4 col = texture2D(uRingTex, vec2(u, 0.5));
+        if (col.a < 0.02) discard;
+        gl_FragColor = col;
       }
     `,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
-  });
-
-  // Jupiter procedural atmospheric band shader
-  const jupiterBandMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: globalUniforms.uTime },
-    vertexShader: /* glsl */ `
-      varying vec3 vNormal;
-      varying vec2 vUv;
-      void main() {
-        vNormal = normal;
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uTime;
-      varying vec3 vNormal;
-      varying vec2 vUv;
-      void main() {
-        float bands = sin(vUv.y * 30.0 + sin(vUv.x * 10.0 + uTime * 0.2) * 1.5) * 0.5 + 0.5;
-        vec3 colorA = vec3(0.85, 0.55, 0.35);
-        vec3 colorB = vec3(0.95, 0.88, 0.75);
-        vec3 col = mix(colorA, colorB, bands);
-        gl_FragColor = vec4(col, 1.0);
-      }
-    `,
   });
 
   planetData.forEach((p) => {
@@ -144,21 +244,12 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
     const orbitLine = new THREE.Line(lineGeo, lineMat);
     orreryGroup.add(orbitLine);
 
-    // 2. Planet Sphere Mesh
-    let mat;
-    if (p.bands) {
-      mat = jupiterBandMat;
-    } else {
-      mat = new THREE.MeshPhysicalMaterial({
-        color: p.color,
-        roughness: 0.4,
-        metalness: 0.1,
-      });
-    }
-
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 24, 24), mat);
+    // 2. Planet Sphere Mesh with realistic procedural texture
+    const mat = p.createMaterial();
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 32, 32), mat);
     mesh.name = `Planet_${p.name}`;
     mesh.userData = { name: p.name, isPlanet: true };
+    mesh.rotation.z = p.axialTilt; // Apply authentic axial tilt
     orreryGroup.add(mesh);
 
     // Invisible larger hitSphere for mobile touch & desktop click raycasting
@@ -172,21 +263,63 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
     mesh.add(hitMesh);
     interactiveTargets.push(hitMesh, mesh);
 
-    // Add Saturn Ring
-    if (p.ring) {
-      const ringMesh = new THREE.Mesh(new THREE.RingGeometry(p.size * 1.4, p.size * 2.8, 32), saturnRingMat);
+    // Add Earth's concentric swirling atmospheric clouds
+    let cloudsMesh = null;
+    if (p.hasClouds) {
+      const cloudTex = createEarthCloudTexture();
+      const cloudMat = new THREE.MeshStandardMaterial({
+        map: cloudTex,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        roughness: 0.7,
+      });
+      cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(p.size * 1.018, 32, 32), cloudMat);
+      mesh.add(cloudsMesh);
+    }
+
+    // Add Saturn Photorealistic Ring System
+    if (p.hasRing && !p.isUranusRing) {
+      const ringMesh = new THREE.Mesh(
+        new THREE.RingGeometry(p.size * 1.35, p.size * 2.85, 64),
+        saturnRingMat
+      );
       ringMesh.rotation.x = Math.PI / 2.3;
       mesh.add(ringMesh);
     }
 
+    // Add Uranus delicate ring
+    if (p.isUranusRing) {
+      const uranRingMat = new THREE.MeshBasicMaterial({
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0.28,
+        side: THREE.DoubleSide,
+      });
+      const uranRingMesh = new THREE.Mesh(
+        new THREE.RingGeometry(p.size * 1.3, p.size * 1.7, 48),
+        uranRingMat
+      );
+      uranRingMesh.rotation.x = Math.PI / 2.0;
+      mesh.add(uranRingMesh);
+    }
+
     planets.push({
       mesh,
+      cloudsMesh,
       name: p.name,
       dist: p.dist,
       speed: p.speed,
+      spinSpeed: p.spinSpeed,
       angle: Math.random() * Math.PI * 2,
     });
   });
+
+  // ═════════════════════════════════════════════════════════
+  // 3. COMET WITH DYNAMIC DUAL TAIL (ION & DUST)
+  // ═════════════════════════════════════════════════════════
+  const comet = createComet(orreryGroup);
+  interactiveTargets.push(comet.hitMesh, comet.nucleusMesh);
 
   // ── 3. DUAL ANGLED TELEMETRY CONSOLES (LEFT & RIGHT) IN PHYSICS POD STYLE ──
   const screensManager = createAstronomyScreens(group, camera);
@@ -256,23 +389,30 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
   window.addEventListener('pointerdown', handlePointerDown, { passive: true });
   window.addEventListener('pointerup', handlePointerUp, { passive: true });
 
-  // ── 6. UPDATE LOOP (ORBITS, SUN, TELEMETRY & SCREENS) ──
+  // ── 6. UPDATE LOOP (ORBITS, SUN, TELEMETRY, COMET & SCREENS) ──
   const update = (elapsed, dt) => {
-    // 1. Advance Keplerian orbits
+    // 1. Advance Keplerian orbits & planet axial spins
     const timeScale = controls.orbitalTimeScale.value;
     planets.forEach((p) => {
       p.angle += p.speed * 0.25 * timeScale * dt;
       p.mesh.position.x = Math.cos(p.angle) * p.dist;
       p.mesh.position.z = Math.sin(p.angle) * p.dist;
+      p.mesh.rotation.y += p.spinSpeed * dt;
+      if (p.cloudsMesh) {
+        p.cloudsMesh.rotation.y += p.spinSpeed * 1.3 * dt;
+      }
     });
 
-    // 2. Update Floor-Standing TV Screens (Nebulas, Voyager 1 & ISS, Galaxies)
+    // 2. Update Dynamic Comet (Kepler acceleration, Coma flaring & Dual Tails)
+    comet.update(elapsed, dt);
+
+    // 3. Update Floor-Standing TV Screens (Nebulas, Voyager 1 & ISS, Galaxies)
     screensManager.update(dt);
 
-    // 3. Update Photorealistic Sun, Sunspots & Coronal Flares
+    // 4. Update Photorealistic Sun, Sunspots & Coronal Flares
     sunSystem.update(elapsed, dt);
 
-    // 4. Update Celestial Telemetry (3D Card & Orientation)
+    // 5. Update Celestial Telemetry (3D Card & Orientation)
     telemetry.update(elapsed, dt);
   };
 
@@ -281,9 +421,12 @@ export function buildAstronomyRoboticsHub(scene, globalUniforms, camera) {
     update,
     controls,
     telemetry,
+    comet,
     selectCelestialBody: (name) => {
       if (name === 'Sun') {
         telemetry.selectBody(sunMesh, 'Sun');
+      } else if (name === 'Comet') {
+        telemetry.selectBody(comet.group, 'Comet');
       } else {
         const found = planets.find((p) => p.name === name);
         if (found) telemetry.selectBody(found.mesh, name);

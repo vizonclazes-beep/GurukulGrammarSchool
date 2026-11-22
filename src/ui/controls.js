@@ -130,6 +130,11 @@ export function animateCamera(camera, controls) {
    * over duration seconds with smooth cubic in-out easing.
    */
   function _transition(targetPos, lookAt, stationKey, duration = 1.4) {
+    // If mobile robot camera tracking is active, disengage it cleanly
+    if (typeof window !== 'undefined' && window.__sim?.mobileRobots?.telemetry) {
+      window.__sim.mobileRobots.telemetry.deselect();
+    }
+
     // Disable controls during transition so OrbitControls does not fight camera motion
     controls.enabled = false;
     controls.enableDamping = false;

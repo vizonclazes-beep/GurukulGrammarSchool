@@ -1,169 +1,227 @@
-// src/stations/celestialTelemetry.js — Interactive Scientific Telemetry for Sun & Planets on Click/Touch
+// src/stations/celestialTelemetry.js — Interactive Scientific Telemetry for Sun, Planets & Comets on Click/Touch
 import * as THREE from 'three';
-import { isMobileOrTablet } from '../ui/deviceOrientation.js';
+import { isMobileOrTablet, getViewportRoot } from '../ui/deviceOrientation.js';
 
-// ── AUTHENTIC SCIENTIFIC CELESTIAL DATABASE ──
+// ── AUTHENTIC ASTROPHYSICAL & PLANETARY SCIENCE DATABASE ──
 export const CELESTIAL_DATA = {
   Sun: {
     name: 'THE SUN (SOL)',
-    designation: 'G-Type Main-Sequence Star // Spectral Class G2V',
+    designation: 'G-Type Main-Sequence Star // Spectral Class G2V // Solar Anchor',
     accentColor: '#ffaa00',
     stats: [
       { label: 'EQUATORIAL RADIUS', value: '696,340 km (109.3 × Earth)' },
       { label: 'SOLAR MASS', value: '1.989 × 10³⁰ kg (333,000 × Earth)' },
       { label: 'SURFACE TEMPERATURE', value: '5,500 °C (5,778 K Photosphere)' },
-      { label: 'CORE TEMPERATURE', value: '15,000,000 °C (Nuclear Fusion)' },
-      { label: 'ROTATION PERIOD', value: '25.05 Days (Equator) to 34.4 Days (Poles)' },
-      { label: 'SYSTEM MASS FRACTION', value: '99.86% of Total Solar System Mass' },
-      { label: 'COMPOSITION', value: '73.46% Hydrogen, 24.85% Helium, 1.69% O/C/Fe' },
-      { label: 'MAGNETIC PHENOMENA', value: 'Sunspots, Coronal Loops, Solar Flares & CMEs' },
+      { label: 'CORE TEMPERATURE', value: '15,700,000 °C (Proton Fusion)' },
+      { label: 'ROTATION PERIOD', value: '25.05 Days (Equator) / 34.4 Days (Poles)' },
+      { label: 'LUMINOSITY OUTPUT', value: '3.828 × 10²⁶ Watts (Continuous Power)' },
+      { label: 'CORE PRESSURE', value: '2.477 × 10¹¹ bar (Center of Gravity)' },
+      { label: 'SYSTEM MASS RATIO', value: '99.86% of Total Solar System Mass' },
+      { label: 'CORONAL TEMPERATURE', value: '1,000,000 to 3,000,000 K' },
+      { label: 'SOLAR WIND VELOCITY', value: '400 – 750 km/s (Supersonic Plasma)' },
+      { label: 'CHEMICAL ABUNDANCE', value: '73.46% Hydrogen, 24.85% Helium, 1.69% Heavy' },
+      { label: 'FLAGSHIP MISSIONS', value: 'Parker Solar Probe, SOHO, SDO, Aditya-L1' },
     ],
     summary:
-      'The central gravitational anchor of our solar system. A middle-aged G2V yellow dwarf star generating 3.828 × 10²⁶ Watts via proton-proton chain nuclear fusion in its core. Active magnetic fields drive sunspots and eruptive coronal mass ejections.',
+      'The gravitational anchor and thermodynamic powerhouse of our solar system. A 4.6-billion-year-old yellow dwarf fusing 600 million metric tons of hydrogen into helium every second in its core. Dynamic twisted magnetic flux tubes power sunspot cycles, eruptive solar flares, and coronal mass ejections.',
   },
 
   Mercury: {
     name: 'MERCURY',
-    designation: 'Terrestrial Planet // 1st from Sun',
-    accentColor: '#9e9e9e',
+    designation: 'Terrestrial Metalloid Planet // 1st from Sun',
+    accentColor: '#a1a1aa',
     stats: [
-      { label: 'DISTANCE FROM SUN', value: '57.9 Million km (0.387 AU)' },
+      { label: 'DISTANCE FROM SUN', value: '57.91 Million km (0.387 AU)' },
       { label: 'MEAN RADIUS', value: '2,439.7 km (0.383 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '87.97 Earth Days' },
+      { label: 'ORBITAL PERIOD', value: '87.97 Earth Days (Eccentricity 0.2056)' },
+      { label: 'ROTATION (DAY LENGTH)', value: '58.65 Earth Days (3:2 Spin-Orbit)' },
       { label: 'SURFACE TEMPERATURE', value: '-180 °C (Night) to +430 °C (Day)' },
-      { label: 'SURFACE GRAVITY', value: '3.7 m/s² (0.38 g)' },
+      { label: 'SURFACE GRAVITY', value: '3.70 m/s² (0.378 g)' },
+      { label: 'METALLIC CORE', value: '85% of Radius (Molten Iron Dynamo)' },
       { label: 'NATURAL SATELLITES', value: '0 Moons' },
-      { label: 'ATMOSPHERE', value: 'Trace Exosphere (Oxygen, Sodium, Hydrogen)' },
-      { label: 'PRIMARY MISSIONS', value: 'Mariner 10, MESSENGER, BepiColombo' },
+      { label: 'EXOSPHERE DENSITY', value: 'Trace (Oxygen, Sodium, Hydrogen, Helium)' },
+      { label: 'IMPACT BASIN', value: 'Caloris Basin (1,550 km Diameter)' },
+      { label: 'ORBITAL SPEED', value: '47.36 km/s (Fastest in Solar System)' },
+      { label: 'FLAGSHIP MISSIONS', value: 'Mariner 10, MESSENGER, BepiColombo' },
     ],
     summary:
-      'Smallest planet in the solar system and closest to the Sun. Heavily cratered surface resembling Earth’s Moon, with a massive iron-nickel metallic core making up 85% of its planetary radius.',
+      'Smallest planet and closest to the Sun. Possesses a disproportionately enormous metallic iron-nickel core creating an active global magnetic field. Heavily battered by craters and compression scarps, experiencing the most extreme temperature swings in the solar system (+430°C to -180°C).',
   },
 
   Venus: {
     name: 'VENUS',
-    designation: 'Terrestrial Planet // 2nd from Sun',
-    accentColor: '#e6c280',
+    designation: 'Terrestrial Super-Greenhouse Planet // 2nd from Sun',
+    accentColor: '#f59e0b',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '108.2 Million km (0.723 AU)' },
       { label: 'MEAN RADIUS', value: '6,051.8 km (0.949 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '224.7 Earth Days (Retrograde Rotation)' },
-      { label: 'SURFACE TEMPERATURE', value: '+465 °C (Lead-Melting Greenhouse)' },
-      { label: 'SURFACE PRESSURE', value: '92 bar (Equivalent to 900m Underwater)' },
+      { label: 'ORBITAL PERIOD', value: '224.7 Earth Days' },
+      { label: 'RETROGRADE ROTATION', value: '243.0 Earth Days (Clockwise Spin)' },
+      { label: 'SURFACE TEMPERATURE', value: '+465 °C (Hotter than Mercury)' },
+      { label: 'ATMOSPHERIC PRESSURE', value: '92.0 bar (900m Underwater Equivalent)' },
+      { label: 'ATMOSPHERIC COMP.', value: '96.5% CO₂, 3.5% N₂, H₂SO₄ Clouds' },
       { label: 'NATURAL SATELLITES', value: '0 Moons' },
-      { label: 'ATMOSPHERIC COMP.', value: '96.5% CO₂, 3.5% N₂, Sulfuric Acid Clouds' },
-      { label: 'PRIMARY MISSIONS', value: 'Venera 7-14, Magellan, Akatsuki, DAVINCI+' },
+      { label: 'SUPER-ROTATION', value: 'Cloud Winds reach 360 km/h (4-day cycle)' },
+      { label: 'VOLCANIC LANDMARKS', value: 'Maat Mons, Maxwell Montes (11 km high)' },
+      { label: 'SURFACE GRAVITY', value: '8.87 m/s² (0.904 g)' },
+      { label: 'FLAGSHIP MISSIONS', value: 'Venera 7–14, Magellan, Akatsuki, DAVINCI+' },
     ],
     summary:
-      'Often called Earth’s twin in size and mass, but afflicted by a runaway greenhouse effect making it the hottest planet in the solar system. Rotates backwards relative to most planets with a day longer than its year (243 Earth days).',
+      'Earth’s topological twin transformed into a hellish pressure-cooker by an ancient runaway greenhouse catastrophe. Its dense carbon dioxide atmosphere and sulfuric acid cloud decks trap heat to a uniform 465°C. Spins backwards (retrograde) so slowly that its day is longer than its orbital year.',
   },
 
   Earth: {
     name: 'EARTH (TERRA)',
-    designation: 'Terrestrial Planet // 3rd from Sun',
-    accentColor: '#3b82f6',
+    designation: 'Habitable Ocean World // 3rd from Sun // Planetary Biosphere',
+    accentColor: '#0ea5e9',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '149.6 Million km (1.000 AU)' },
-      { label: 'MEAN RADIUS', value: '6,371.0 km (Equatorial: 6,378.1 km)' },
-      { label: 'ORBITAL PERIOD', value: '365.256 Days (1.000 Year)' },
+      { label: 'EQUATORIAL RADIUS', value: '6,378.1 km (Mean: 6,371.0 km)' },
+      { label: 'ORBITAL PERIOD', value: '365.256 Days (Mean Speed 29.78 km/s)' },
+      { label: 'ROTATION PERIOD', value: '23h 56m 04s (Sidereal Day)' },
       { label: 'SURFACE TEMPERATURE', value: 'Mean +15 °C (-89.2 °C to +56.7 °C)' },
-      { label: 'SURFACE GRAVITY', value: '9.807 m/s² (1.00 g)' },
-      { label: 'NATURAL SATELLITES', value: '1 (The Moon / Luna, R = 1,737 km)' },
-      { label: 'ATMOSPHERE', value: '78.08% N₂, 20.95% O₂, 0.93% Ar, 0.04% CO₂' },
-      { label: 'BIOSPHERE STATUS', value: 'Only Known Astronomical Body Harboring Life' },
+      { label: 'SURFACE GRAVITY', value: '9.807 m/s² (1.000 g Standard)' },
+      { label: 'SURFACE LIQUID WATER', value: '70.8% Oceans (1.332 Billion km³)' },
+      { label: 'ATMOSPHERIC COMP.', value: '78.08% N₂, 20.95% O₂, 0.93% Ar, 0.04% CO₂' },
+      { label: 'NATURAL SATELLITES', value: '1 (The Moon / Luna, Orbit 384,400 km)' },
+      { label: 'AXIAL TILT (OBLIQUITY)', value: '23.44° (Stable Four-Season Cycle)' },
+      { label: 'GEODYNAMO FIELD', value: 'Dipole Shield Deflecting Cosmic Radiation' },
+      { label: 'BIOSPHERE STATUS', value: 'Only Confirmed Life-Bearing Astronomical Body' },
     ],
     summary:
-      'Humanity’s home world. The only known celestial body possessing liquid water oceans on its surface, an active dynamic plate tectonic system, a protective geomagnetic field, and an oxygen-rich atmosphere sustaining complex life.',
+      'Humanity’s oasis in deep space. Possesses dynamic active plate tectonics, expansive liquid water oceans, an oxygen-rich atmosphere, and a molten iron core geodynamo creating a protective magnetosphere that shields millions of species of terrestrial and marine life.',
   },
 
   Mars: {
     name: 'MARS',
-    designation: 'Terrestrial Planet // 4th from Sun',
-    accentColor: '#ef4444',
+    designation: 'Terrestrial Desert Planet // 4th from Sun',
+    accentColor: '#f97316',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '227.9 Million km (1.524 AU)' },
-      { label: 'MEAN RADIUS', value: '3,389.5 km (0.532 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '686.98 Earth Days (Sol = 24h 37m)' },
-      { label: 'SURFACE TEMPERATURE', value: '-140 °C to +20 °C (Mean -63 °C)' },
+      { label: 'EQUATORIAL RADIUS', value: '3,396.2 km (0.533 × Earth)' },
+      { label: 'ORBITAL PERIOD', value: '686.98 Earth Days (1.88 Earth Years)' },
+      { label: 'SOL (DAY LENGTH)', value: '24h 37m 22s (Nearly Identical to Earth)' },
+      { label: 'SURFACE TEMPERATURE', value: '-140 °C (Winter Pole) to +20 °C (Noon)' },
       { label: 'SURFACE GRAVITY', value: '3.72 m/s² (0.379 g)' },
-      { label: 'NATURAL SATELLITES', value: '2 Moons (Phobos & Deimos)' },
-      { label: 'ATMOSPHERE', value: '95.32% CO₂, 2.6% N₂, 1.9% Ar (Thin 6.1 mbar)' },
-      { label: 'EXPLORATION FLEET', value: 'Curiosity, Perseverance, Ingenuity, MRO' },
+      { label: 'ATMOSPHERIC PRESSURE', value: '6.1 mbar (0.6% of Earth, 95.3% CO₂)' },
+      { label: 'SHIELD VOLCANO', value: 'Olympus Mons (21.9 km High, Solar System Record)' },
+      { label: 'GRAND CANYON', value: 'Valles Marineris (4,000 km Long, 7 km Deep)' },
+      { label: 'POLAR ICE RESERVOIRS', value: 'North & South Caps (Water Ice + CO₂ Dry Ice)' },
+      { label: 'NATURAL SATELLITES', value: '2 (Phobos & Deimos, Captured Asteroids)' },
+      { label: 'EXPLORATION FLEET', value: 'Curiosity, Perseverance, Ingenuity, MRO, MAVEN' },
     ],
     summary:
-      'The Red Planet, colored by ferric oxide (rust) dust on its surface. Hosts Olympus Mons (the largest volcano in the solar system, 21.9 km high) and Valles Marineris canyon. Abundant evidence of ancient flowing liquid water riverbeds and lake basins.',
+      'The Red Planet, tinted by oxidized iron mineral dust across its ancient river valleys, dried lakebeds, and basaltic dune fields. Hosts the colossal Olympus Mons volcano and the planetary Valles Marineris rift. Active rovers are currently extracting cores to search for ancient biosignatures.',
   },
 
   Jupiter: {
     name: 'JUPITER',
-    designation: 'Gas Giant // 5th from Sun',
-    accentColor: '#d97706',
+    designation: 'Gas Giant Jovian Anchor // 5th from Sun',
+    accentColor: '#ea580c',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '778.5 Million km (5.204 AU)' },
       { label: 'EQUATORIAL RADIUS', value: '71,492 km (11.209 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '11.86 Earth Years (Rotation: 9h 55m)' },
-      { label: 'CLOUD TOP TEMP.', value: '-110 °C (Core: ~24,000 °C)' },
-      { label: 'PLANETARY MASS', value: '1.898 × 10²⁷ kg (317.8 × Earth, 2.5× All Others)' },
-      { label: 'NATURAL SATELLITES', value: '95 Confirmed Moons (Io, Europa, Ganymede, Callisto)' },
-      { label: 'ATMOSPHERE', value: '89.8% H₂, 10.2% He, Ammonia & Methane Clouds' },
-      { label: 'PRIMARY MISSIONS', value: 'Pioneer, Voyager, Galileo, Juno, JUICE' },
+      { label: 'PLANETARY MASS', value: '1.898 × 10²⁷ kg (317.8 × Earth, 2.5× All Planets)' },
+      { label: 'ORBITAL PERIOD', value: '11.86 Earth Years' },
+      { label: 'ROTATION PERIOD', value: '9h 55m 30s (Fastest Spin in Solar System)' },
+      { label: 'GREAT RED SPOT', value: '16,350 km Anticyclone (Raging >350 Years)' },
+      { label: 'CLOUD TOP TEMP.', value: '-110 °C (Mantle Core: ~24,000 °C)' },
+      { label: 'NATURAL SATELLITES', value: '95 Moons (Io, Europa, Ganymede, Callisto)' },
+      { label: 'ATMOSPHERIC COMP.', value: '89.8% H₂, 10.2% He, NH₃ Crystals & CH₄' },
+      { label: 'MAGNETOSPHERE SPAN', value: 'Largest Structure in Solar System (20,000× Earth)' },
+      { label: 'INTERIOR STRUCTURE', value: 'Liquid Metallic Hydrogen Dynamo' },
+      { label: 'FLAGSHIP MISSIONS', value: 'Voyager 1 & 2, Galileo, Juno, JUICE, Europa Clipper' },
     ],
     summary:
-      'The undisputed king of planets. A colossal gas giant with an internal metallic hydrogen mantle generating an immense magnetosphere. Features the Great Red Spot—an anticyclonic storm larger than Earth that has raged for over 350 years.',
+      'The undisputed titan of the planetary system. A vast gas giant featuring alternating turbulent ammonia cloud belts and zones with the iconic Great Red Spot storm. Inside, immense gravitational pressures turn hydrogen into liquid electrical metal, generating a ferocious radiation belt and magnetosphere.',
   },
 
   Saturn: {
     name: 'SATURN',
-    designation: 'Gas Giant // 6th from Sun',
-    accentColor: '#fde047',
+    designation: 'Ringed Gas Giant // 6th from Sun',
+    accentColor: '#eab308',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '1.434 Billion km (9.582 AU)' },
       { label: 'EQUATORIAL RADIUS', value: '60,268 km (9.449 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '29.45 Earth Years (Rotation: 10h 33m)' },
-      { label: 'MEAN DENSITY', value: '0.687 g/cm³ (Less Dense than Liquid Water)' },
-      { label: 'RING SYSTEM SPAN', value: '282,000 km Wide, Only ~10–30 Meters Thick' },
+      { label: 'ORBITAL PERIOD', value: '29.45 Earth Years' },
+      { label: 'ROTATION PERIOD', value: '10h 33m 38s (Rapid Oblate Flattening)' },
+      { label: 'MEAN BULK DENSITY', value: '0.687 g/cm³ (Would Float in Water Ocean)' },
+      { label: 'RING SYSTEM SPAN', value: '282,000 km Across, Only ~10–30m Thick' },
+      { label: 'RING COMPOSITION', value: '99% Pure Water Ice Particles with Tholins' },
       { label: 'NATURAL SATELLITES', value: '146 Confirmed Moons (Titan, Enceladus, Mimas)' },
-      { label: 'RING COMPOSITION', value: '99% Pure Water Ice Particles with Silicate Dust' },
-      { label: 'PRIMARY MISSIONS', value: 'Pioneer 11, Voyager 1 & 2, Cassini-Huygens' },
+      { label: 'OCEAN MOONS', value: 'Enceladus (Cryovolcanoes) & Titan (Methane Seas)' },
+      { label: 'POLAR PHENOMENON', value: 'North Polar Hexagonal Jet Stream (30,000 km wide)' },
+      { label: 'ATMOSPHERIC COMP.', value: '96.3% H₂, 3.25% He, 0.45% CH₄ & Ammonia' },
+      { label: 'FLAGSHIP MISSIONS', value: 'Pioneer 11, Voyager 1 & 2, Cassini-Huygens' },
     ],
     summary:
-      'Celebrated for its majestic ring system made of billions of icy fragments. Saturn is orbited by Titan (possessing a dense nitrogen atmosphere and liquid methane lakes) and Enceladus (harboring an active subsurface ocean with erupting cryovolcanic geysers).',
+      'Renowned for its breathtaking ring system of pure reflective water ice sheets spanning 282,000 km. Saturn has the lowest bulk density of any planet. Orbits Titan—possessing a thick nitrogen sky and liquid ethane/methane lakes—and Enceladus, erupting geysers from its warm subsurface liquid ocean.',
   },
 
   Uranus: {
     name: 'URANUS',
-    designation: 'Ice Giant // 7th from Sun',
+    designation: 'Ice Giant Planet // 7th from Sun // Retrograde Rolling World',
     accentColor: '#38bdf8',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '2.871 Billion km (19.19 AU)' },
       { label: 'EQUATORIAL RADIUS', value: '25,559 km (4.007 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '84.02 Earth Years (Rotation: 17h 14m)' },
-      { label: 'AXIAL TILT', value: '97.77° (Rotates Completely on its Side)' },
-      { label: 'CLOUD TOP TEMP.', value: '-224 °C (Coldest Planetary Atmosphere)' },
-      { label: 'NATURAL SATELLITES', value: '28 Known Moons (Titania, Oberon, Miranda)' },
-      { label: 'ATMOSPHERE', value: '83% H₂, 15% He, 2.3% CH₄ (Methane Blue Tint)' },
+      { label: 'ORBITAL PERIOD', value: '84.02 Earth Years' },
+      { label: 'ROTATION PERIOD', value: '17h 14m 24s' },
+      { label: 'AXIAL TILT (OBLIQUITY)', value: '97.77° (Rotates Completely on its Side)' },
+      { label: 'CLOUD TOP TEMP.', value: '-224.2 °C (Coldest Planetary Atmosphere)' },
+      { label: 'METHANE ABSORPTION', value: 'Absorbs Red Photons, Reflects Cyan Sky' },
+      { label: 'NATURAL SATELLITES', value: '28 Known Moons (Titania, Oberon, Miranda, Ariel)' },
+      { label: 'RING SYSTEM', value: '13 Narrow Opaque Dark Rings (Epsilon Ring)' },
+      { label: 'MANTLE COMPOSITION', value: 'Water, Ammonia & Methane Supercritical Ices' },
+      { label: 'MAGNETIC FIELD', value: 'Tilted 59° from Rotational Axis & Off-Center' },
       { label: 'PRIMARY MISSIONS', value: 'Voyager 2 Flyby (January 1986)' },
     ],
     summary:
-      'An enigmatic ice giant rolling through space on its side due to a catastrophic ancient proto-planetary collision. Its blue-green cyan color stems from atmospheric methane absorbing red wavelengths of sunlight.',
+      'A serene pale-cyan ice giant knocked completely onto its side by an ancient proto-planetary cataclysm, producing 42-year long seasonal extremes of polar sunlight and darkness. Its icy mantle of dense supercritical fluids envelopes a small rocky core surrounded by 13 charcoal-dark rings.',
   },
 
   Neptune: {
     name: 'NEPTUNE',
-    designation: 'Ice Giant // 8th from Sun',
-    accentColor: '#2563eb',
+    designation: 'Ice Giant Outer World // 8th from Sun // Supersonic Storm System',
+    accentColor: '#3b82f6',
     stats: [
       { label: 'DISTANCE FROM SUN', value: '4.495 Billion km (30.07 AU)' },
       { label: 'EQUATORIAL RADIUS', value: '24,764 km (3.883 × Earth)' },
-      { label: 'ORBITAL PERIOD', value: '164.8 Earth Years (Rotation: 16h 06m)' },
+      { label: 'ORBITAL PERIOD', value: '164.79 Earth Years (Discovered 1846)' },
+      { label: 'ROTATION PERIOD', value: '16h 06m 36s' },
       { label: 'SUPERSONIC WINDS', value: 'Up to 2,100 km/h (Fastest in Solar System)' },
+      { label: 'INTERNAL HEAT FLUX', value: 'Radiates 2.61× More Energy than Absorbed' },
       { label: 'CLOUD TOP TEMP.', value: '-218 °C' },
       { label: 'NATURAL SATELLITES', value: '16 Known Moons (Triton, Proteus, Nereid)' },
-      { label: 'ATMOSPHERE', value: '80% H₂, 19% He, 1.5% CH₄ (Deep Azure Azure)' },
+      { label: 'RETROGRADE MOON', value: 'Triton (Captured Kuiper Belt Object, N₂ Geysers)' },
+      { label: 'ATMOSPHERIC COMP.', value: '80% H₂, 19% He, 1.5% CH₄ (Deep Azure Azure)' },
+      { label: 'STORM SYSTEMS', value: 'Great Dark Spot & Rapid Methane Cirrus Bands' },
       { label: 'PRIMARY MISSIONS', value: 'Voyager 2 Flyby (August 1989)' },
     ],
     summary:
-      'The outermost major planet of the solar system, shrouded in deep vivid blue skies swept by violent supersonic winds. Its largest moon, Triton, orbits retrograde and shoots active nitrogen ice geysers into its tenuous atmosphere.',
+      'The outermost major planet of our solar system, an azure blue ice world whipped by violent supersonic winds exceeding 2,100 km/h. It generates strong internal geothermal heat driving turbulent storm systems. Its largest moon, Triton, orbits backward and vents nitrogen cryovolcanic geysers into vacuum.',
+  },
+
+  Comet: {
+    name: 'COMET 1P/HALLEY & NEOWISE',
+    designation: 'Periodic Primitive Icy Body // Highly Eccentric Keplerian Orbit',
+    accentColor: '#22d3ee',
+    stats: [
+      { label: 'ORBITAL ECCENTRICITY', value: 'e = 0.967 (Highly Elliptical Trajectory)' },
+      { label: 'PERIHELION DISTANCE', value: '0.586 AU (Whips Close to the Sun)' },
+      { label: 'APHELION DISTANCE', value: '35.1 AU (Extends Past Neptune / Kuiper)' },
+      { label: 'ORBITAL PERIOD', value: '75.3 – 76.0 Earth Years' },
+      { label: 'NUCLEUS GEOMETRY', value: '15 × 8 × 8 km (Porous "Dirty Snowball")' },
+      { label: 'NUCLEUS ALBEDO', value: '0.04 (Darker than Coal / Charcoal)' },
+      { label: 'SUBLIMATION RATE', value: '10 – 50 Tonnes/sec of Water Ice & Dust' },
+      { label: 'ION TAIL (TYPE I)', value: 'Blue Plasma (CO⁺/N₂⁺) Points Exactly Away from Sun' },
+      { label: 'DUST TAIL (TYPE II)', value: 'Golden-White Silicate Dust Curved by Radiation Pressure' },
+      { label: 'MAX TAIL LENGTH', value: 'Up to 100 Million km at Perihelion' },
+      { label: 'METEOR SHOWERS', value: 'Eta Aquariids (May) & Orionids (October)' },
+      { label: 'HISTORIC FLYBYS', value: 'Giotto (ESA), Vega 1 & 2, Suisei, Sakigake' },
+    ],
+    summary:
+      'A pristine frozen relic from the dawn of the solar system 4.6 billion years ago. Composed of water ice, frozen methane, carbon monoxide, and dark carbonaceous silicate dust. As it plunges toward the Sun, solar heat sublimates its ice into a luminous glowing coma and produces two distinct tails: a narrow electric-blue ion tail pushed by the solar wind, and a sweeping curved white dust tail.',
   },
 };
 
@@ -190,7 +248,7 @@ export function createCelestialTelemetry(orreryGroup, camera) {
   cardTexture.magFilter = THREE.LinearFilter;
 
   // 3D Plane Mesh for Floating Holographic Card
-  const planeGeo = new THREE.PlaneGeometry(1.05, 0.52);
+  const planeGeo = new THREE.PlaneGeometry(1.10, 0.55);
   const planeMat = new THREE.MeshBasicMaterial({
     map: cardTexture,
     transparent: true,
@@ -226,7 +284,7 @@ export function createCelestialTelemetry(orreryGroup, camera) {
   reticleMesh.rotation.x = Math.PI / 2;
   cardGroup.add(reticleMesh);
 
-  // ── Helper to detect mobile/tablet mode ──
+  // ── Helper to detect mobile mode ──
   function isMobileMode() {
     return isMobileOrTablet();
   }
@@ -237,7 +295,7 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     hudContainer = document.createElement('div');
     hudContainer.id = 'celestial-telemetry-hud';
 
-    // Inject mobile-suppression CSS rule so 2D celestial data popup is never visible in mobile mode
+    // Inject responsive CSS rules
     const hudStyle = document.createElement('style');
     hudStyle.textContent = `
       @media (max-width: 768px), (pointer: coarse) {
@@ -257,24 +315,26 @@ export function createCelestialTelemetry(orreryGroup, camera) {
       position: fixed;
       bottom: 24px;
       right: 24px;
-      width: 420px;
+      width: 440px;
       max-width: calc(100vw - 48px);
-      background: rgba(10, 14, 24, 0.92);
+      max-height: 82vh;
+      background: rgba(10, 14, 24, 0.94);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(0, 229, 255, 0.35);
-      border-radius: 12px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 24px rgba(0, 229, 255, 0.15);
+      border-radius: 14px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 24px rgba(0, 229, 255, 0.2);
       color: #f1f5f9;
-      font-family: 'Inter', -apple-system, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       z-index: 9999;
       transform: translateY(120%);
       transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
       opacity: 0;
       pointer-events: auto;
-      overflow: hidden;
+      overflow-y: auto;
     `;
-    document.body.appendChild(hudContainer);
+    const root = getViewportRoot();
+    root.appendChild(hudContainer);
   }
 
   let currentTarget = null; // { mesh, dataKey }
@@ -282,8 +342,8 @@ export function createCelestialTelemetry(orreryGroup, camera) {
   function render3DCard(data) {
     ctx.clearRect(0, 0, 1024, 512);
 
-    // Deep glassmorphic background
-    ctx.fillStyle = 'rgba(8, 12, 22, 0.92)';
+    // Solid deep glassmorphic background
+    ctx.fillStyle = '#080c16';
     ctx.fillRect(0, 0, 1024, 512);
 
     // Card border
@@ -293,52 +353,52 @@ export function createCelestialTelemetry(orreryGroup, camera) {
 
     // Top Header Banner
     ctx.fillStyle = data.accentColor;
-    ctx.fillRect(0, 0, 1024, 60);
+    ctx.fillRect(0, 0, 1024, 56);
 
-    ctx.font = '900 28px "Inter", "Segoe UI", sans-serif';
+    ctx.font = '900 26px "Inter", "Segoe UI", sans-serif';
     ctx.fillStyle = '#0a0e1c';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`★ CELESTIAL TELEMETRY // ${data.name}`, 24, 30);
+    ctx.fillText(`★ CELESTIAL TELEMETRY // ${data.name}`, 24, 28);
 
     // Dismiss indicator
     ctx.font = 'bold 20px "Inter", sans-serif';
     ctx.fillStyle = '#0a0e1c';
     ctx.textAlign = 'right';
-    ctx.fillText('✕', 1000, 30);
+    ctx.fillText('✕', 1000, 28);
 
     // Subtitle Designation
-    ctx.font = 'bold 18px "Inter", monospace';
+    ctx.font = 'bold 16px "Inter", monospace';
     ctx.fillStyle = data.accentColor;
-    ctx.fillText(data.designation, 24, 90);
+    ctx.fillText(data.designation, 24, 82);
 
-    // Stats Grid (2 columns)
+    // Stats Grid (2 columns × 4 rows = 8 key scientific attributes)
     const col1X = 24;
     const col2X = 530;
-    let y = 130;
+    let y = 118;
 
-    data.stats.slice(0, 6).forEach((st, idx) => {
+    data.stats.slice(0, 8).forEach((st, idx) => {
       const curX = idx % 2 === 0 ? col1X : col2X;
-      if (idx % 2 === 0 && idx > 0) y += 52;
+      if (idx % 2 === 0 && idx > 0) y += 46;
 
-      ctx.font = 'bold 13px "Inter", monospace';
+      ctx.font = 'bold 12px "Inter", monospace';
       ctx.fillStyle = '#94a3b8';
       ctx.fillText(st.label, curX, y);
 
-      ctx.font = 'bold 17px "Inter", "Segoe UI", sans-serif';
+      ctx.font = 'bold 15px "Inter", "Segoe UI", sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText(st.value, curX, y + 22);
+      ctx.fillText(st.value, curX, y + 18);
     });
 
     // Summary description box at bottom
     ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.fillRect(24, 320, 976, 160);
+    ctx.fillRect(24, 308, 976, 180);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.strokeRect(24, 320, 976, 160);
+    ctx.strokeRect(24, 308, 976, 180);
 
-    ctx.font = 'italic 16px "Inter", "Segoe UI", sans-serif';
+    ctx.font = 'italic 15px "Inter", "Segoe UI", sans-serif';
     ctx.fillStyle = '#e2e8f0';
-    wrapText(ctx, data.summary, 44, 345, 936, 26);
+    wrapText(ctx, data.summary, 42, 335, 940, 24);
 
     cardTexture.needsUpdate = true;
   }
@@ -347,7 +407,7 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     const statsHtml = data.stats
       .map(
         (s) => `
-        <div style="display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:12.5px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:12px;">
           <span style="color:#94a3b8; font-family:monospace; font-weight:600; letter-spacing:0.04em;">${s.label}</span>
           <span style="color:#ffffff; font-weight:700; text-align:right; margin-left:12px;">${s.value}</span>
         </div>
@@ -356,8 +416,8 @@ export function createCelestialTelemetry(orreryGroup, camera) {
       .join('');
 
     hudContainer.innerHTML = `
-      <div style="background:${data.accentColor}; color:#0a0e1c; padding:10px 16px; display:flex; justify-content:space-between; align-items:center; font-weight:900; font-size:13px; letter-spacing:0.05em;">
-        <span>★ CELESTIAL DATA // ${data.name}</span>
+      <div style="background:${data.accentColor}; color:#0a0e1c; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; font-weight:900; font-size:13px; letter-spacing:0.05em;">
+        <span>★ CELESTIAL TELEMETRY // ${data.name}</span>
         <button id="close-telemetry-hud" style="background:transparent; border:none; color:#0a0e1c; font-size:18px; font-weight:900; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
       </div>
       <div style="padding:16px 20px; max-height:480px; overflow-y:auto;">
@@ -399,24 +459,39 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     context.fillText(line, x, y);
   }
 
-  function selectBody(mesh, dataKey) {
-    const data = CELESTIAL_DATA[dataKey];
+  function selectBody(arg1, arg2) {
+    let key, mesh;
+    if (typeof arg1 === 'string') {
+      key = arg1;
+      mesh = arg2;
+    } else {
+      mesh = arg1;
+      key = arg2;
+    }
+    const data = CELESTIAL_DATA[key];
     if (!data) return;
 
-    currentTarget = { mesh, dataKey, data };
-    render3DCard(data);
-
-    // In mobile mode, do not show 2D celestial data popup; only show 3D celestial telemetry
-    if (!isMobileMode()) {
-      render2DHUD(data);
-    } else {
-      hudContainer.style.transform = 'translateY(120%)';
-      hudContainer.style.opacity = '0';
+    // Deselect other telemetry systems to maintain clean uncluttered UI
+    if (typeof window !== 'undefined' && window.__sim) {
+      window.__sim.scientistTelemetry?.deselect();
+      window.__sim.rocketTelemetry?.deselect();
+      window.__sim.mobileRobots?.telemetry?.deselect();
     }
 
+    currentTarget = { mesh, dataKey: key };
+
+    // Update leader line color and reticle
+    const accentHex = parseInt(data.accentColor.replace('#', '0x'), 16);
+    lineMat.color.setHex(accentHex);
+    reticleMat.color.setHex(accentHex);
+
+    render3DCard(data);
     cardGroup.visible = true;
-    lineMat.color.set(data.accentColor);
-    reticleMat.color.set(data.accentColor);
+
+    // Show 2D HUD drawer
+    if (!isMobileMode()) {
+      render2DHUD(data);
+    }
   }
 
   function deselect() {
@@ -426,43 +501,53 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     hudContainer.style.opacity = '0';
   }
 
-  const worldPos = new THREE.Vector3();
-  const cardTargetPos = new THREE.Vector3();
+  function update(dt = 0.016) {
+    if (!cardGroup.visible || !currentTarget || !currentTarget.mesh) return;
 
-  const update = (elapsed, dt) => {
-    if (!currentTarget || !cardGroup.visible) return;
+    // Follow target world position in real-time
+    const worldPos = new THREE.Vector3();
+    currentTarget.mesh.getWorldPosition(worldPos);
 
-    // Follow selected target mesh in local orrery coordinates
-    const targetPos = currentTarget.mesh.position;
-    reticleMesh.position.copy(targetPos);
+    // Convert to orreryGroup local coordinates
+    const localPos = worldPos.clone();
+    orreryGroup.worldToLocal(localPos);
 
-    // Pulse reticle
-    const reticleScale = 1.0 + Math.sin(elapsed * 4.0) * 0.15;
-    reticleMesh.scale.set(reticleScale, reticleScale, 1.0);
+    // Place card offset from planet/comet relative to camera view
+    const cardPos = localPos.clone();
+    if (camera) {
+      const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      cardPos.add(camRight.multiplyScalar(0.50));
+    } else {
+      cardPos.x += 0.50;
+    }
+    cardPos.y += 0.42;
+    cardMesh.position.copy(cardPos);
 
-    // Position 3D card slightly above and to the side of the target body
-    const isSun = currentTarget.dataKey === 'Sun';
-    const offsetX = isSun ? 0.65 : (targetPos.x > 0 ? 0.45 : -0.45);
-    cardTargetPos.set(targetPos.x + offsetX, targetPos.y + 0.42, targetPos.z);
-    cardMesh.position.copy(cardTargetPos);
-
-    // Make 3D card face the camera for crystal clarity
+    // Billboard: Card always turns to face camera
     if (camera) {
       cardMesh.quaternion.copy(camera.quaternion);
     }
 
-    // Update leader line points
-    const anchorOff = offsetX > 0 ? -0.45 : 0.45;
-    const pts = [targetPos.clone(), cardTargetPos.clone().add(new THREE.Vector3(anchorOff, -0.15, 0))];
-    leaderLine.geometry.setFromPoints(pts);
-  };
+    // Connect leader line from target to card
+    const positions = lineGeo.attributes.position.array;
+    positions[0] = localPos.x;
+    positions[1] = localPos.y;
+    positions[2] = localPos.z;
+    positions[3] = cardPos.x;
+    positions[4] = cardPos.y - 0.25;
+    positions[5] = cardPos.z;
+    lineGeo.attributes.position.needsUpdate = true;
+
+    // Position holographic reticle ring around target
+    reticleMesh.position.copy(localPos);
+    reticleMesh.rotation.z += dt * 1.5;
+  }
 
   return {
     selectBody,
     deselect,
     update,
-    getCurrentTarget: () => currentTarget,
-    cardMesh,
     cardGroup,
+    getCurrentTarget: () => currentTarget,
   };
 }
