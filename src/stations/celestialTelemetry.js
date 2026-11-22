@@ -1,5 +1,6 @@
 // src/stations/celestialTelemetry.js — Interactive Scientific Telemetry for Sun & Planets on Click/Touch
 import * as THREE from 'three';
+import { isMobileOrTablet } from '../ui/deviceOrientation.js';
 
 // ── AUTHENTIC SCIENTIFIC CELESTIAL DATABASE ──
 export const CELESTIAL_DATA = {
@@ -225,13 +226,9 @@ export function createCelestialTelemetry(orreryGroup, camera) {
   reticleMesh.rotation.x = Math.PI / 2;
   cardGroup.add(reticleMesh);
 
-  // ── Helper to detect mobile mode (viewports <= 768px or mobile devices) ──
+  // ── Helper to detect mobile/tablet mode ──
   function isMobileMode() {
-    return (
-      window.innerWidth <= 768 ||
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-      ('ontouchstart' in window && window.innerWidth <= 1024)
-    );
+    return isMobileOrTablet();
   }
 
   // ── 2D HUD DRAWER (Bottom-Right Scientific Overlay) ──
@@ -243,11 +240,15 @@ export function createCelestialTelemetry(orreryGroup, camera) {
     // Inject mobile-suppression CSS rule so 2D celestial data popup is never visible in mobile mode
     const hudStyle = document.createElement('style');
     hudStyle.textContent = `
-      @media (max-width: 768px) {
+      @media (max-width: 768px), (pointer: coarse) {
         #celestial-telemetry-hud {
           display: none !important;
           pointer-events: none !important;
         }
+      }
+      body.vz-mobile-tablet #celestial-telemetry-hud {
+        display: none !important;
+        pointer-events: none !important;
       }
     `;
     document.head.appendChild(hudStyle);

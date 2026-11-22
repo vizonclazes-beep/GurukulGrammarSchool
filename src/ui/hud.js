@@ -435,39 +435,11 @@ function injectStyles() {
     }
 
     /* ═══════════════════════════════
-       RESPONSIVE — Device-Tailored HUD
+       RESPONSIVE — Device & Orientation Tailored HUD (Phones, Tablets & iPads)
     ═══════════════════════════════ */
-    @media (max-width: 900px) {
-      #vz-navbar {
-        bottom: 12px;
-        padding: 4px 6px;
-        gap: 2px;
-      }
 
-      .vz-nav-btn {
-        padding: 6px 8px;
-        min-width: 46px;
-      }
-
-      .vz-nav-icon {
-        font-size: 15px;
-      }
-
-      .vz-nav-label {
-        font-size: 8px;
-      }
-
-      #vz-panel-container {
-        right: 14px;
-        width: 245px;
-      }
-
-      .vz-panel {
-        padding: 14px 16px;
-      }
-    }
-
-    @media (max-width: 640px) {
+    /* ── 1. PORTRAIT MODE (Phones & Tablets) ── */
+    @media (orientation: portrait), (max-width: 640px) and (orientation: portrait) {
       .vz-nav-label {
         display: none;
       }
@@ -477,15 +449,20 @@ function injectStyles() {
         padding: 7px 5px;
       }
 
-      /* Compact corner positioning on mobile so main 3D experiment is 100% visible */
+      #vz-navbar {
+        bottom: 12px;
+        padding: 4px 6px;
+      }
+
+      /* Compact bottom-right corner card in portrait mode */
       #vz-panel-container {
         top: auto;
         bottom: 78px;
-        right: 10px;
+        right: 12px;
         left: auto;
-        width: 285px;
-        max-width: calc(100vw - 20px);
-        max-height: 42vh;
+        width: 300px;
+        max-width: calc(100vw - 24px);
+        max-height: 48vh;
         transform: none;
       }
 
@@ -496,7 +473,7 @@ function injectStyles() {
       .vz-edge-tab {
         top: auto;
         bottom: 78px;
-        right: 10px;
+        right: 12px;
         border-radius: 20px;
         border-right: 1px solid rgba(0, 229, 255, 0.5);
         transform: none;
@@ -505,6 +482,103 @@ function injectStyles() {
 
       .vz-edge-tab:hover {
         transform: translateY(-2px);
+      }
+    }
+
+    /* ── 2. LANDSCAPE MODE (Mobile Phones, Tablets & iPads) ── */
+    @media (orientation: landscape) and (max-height: 850px), body.vz-orientation-landscape #vz-panel-container {
+      #vz-navbar {
+        bottom: 10px;
+        padding: 3px 6px;
+        gap: 2px;
+      }
+
+      .vz-nav-btn {
+        padding: 5px 8px;
+        min-width: 44px;
+      }
+
+      .vz-nav-icon {
+        font-size: 15px;
+      }
+
+      .vz-nav-label {
+        font-size: 8px;
+        letter-spacing: 0.05em;
+      }
+
+      /* Wide landscape-oriented card on the right */
+      #vz-panel-container {
+        top: 12px;
+        bottom: 58px;
+        right: 14px;
+        left: auto;
+        width: 420px;
+        max-width: calc(100vw - 90px);
+        max-height: calc(100vh - 70px);
+        transform: none;
+      }
+
+      #vz-panel-container.hidden-state {
+        transform: translateX(35px);
+      }
+
+      .vz-panel {
+        padding: 12px 16px;
+        max-height: calc(100vh - 70px);
+      }
+
+      /* In landscape mode, arrange buttons in a clean 2-3 column grid */
+      .vz-btn-group {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+        gap: 6px;
+      }
+
+      .vz-btn-pill {
+        padding: 5px 8px;
+        font-size: 9.5px;
+        text-align: center;
+      }
+
+      .vz-panel-info {
+        font-size: 10px !important;
+        padding: 8px !important;
+        line-height: 1.38 !important;
+      }
+
+      .vz-edge-tab {
+        top: auto;
+        bottom: 58px;
+        right: 14px;
+        border-radius: 20px;
+        border-right: 1px solid rgba(0, 229, 255, 0.5);
+        transform: none;
+        padding: 7px 14px;
+      }
+
+      .vz-edge-tab:hover {
+        transform: translateY(-2px);
+      }
+    }
+
+    /* ── 3. TABLETS & IPAD SPECIFIC OPTIMIZATIONS ── */
+    @media (min-width: 641px) and (max-width: 1024px) and (orientation: portrait) {
+      .vz-nav-label {
+        display: block;
+        font-size: 8.5px;
+      }
+
+      .vz-nav-btn {
+        min-width: 50px;
+        padding: 8px 10px;
+      }
+
+      #vz-panel-container {
+        width: 340px;
+        max-height: 52vh;
+        bottom: 84px;
+        right: 18px;
       }
     }
   `;

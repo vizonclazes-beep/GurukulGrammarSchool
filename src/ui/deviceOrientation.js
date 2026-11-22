@@ -10,19 +10,47 @@ const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2
 const qYaw = new THREE.Quaternion();
 
 /**
- * Checks if the current browser environment is on a mobile phone or tablet device.
+ * Detects if the current device is an iPad (including modern iPadOS reporting as Macintosh).
+ * @returns {boolean}
+ */
+export function isIPad() {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPad/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
+  );
+}
+
+/**
+ * Checks if the current browser environment is on a mobile phone or tablet device (including iPads).
  * @returns {boolean}
  */
 export function isMobileOrTablet() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  const touch = typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1;
-  const isSmall = typeof window !== 'undefined' && window.innerWidth <= 900;
-  return /Android|iPhone|iPad|iPod|Windows Phone|Mobile|Tablet/i.test(ua) || (touch && isSmall);
+  const hasTouch = (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
+  const isIPadDevice = isIPad();
+  const isMobileUA = /Android|iPhone|iPod|Windows Phone|Mobile|Tablet|Silk/i.test(ua);
+  const isTabletResolution = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 1024 && hasTouch;
+
+  return isIPadDevice || isMobileUA || isTabletResolution;
+}
+
+/**
+ * Checks if current viewport or device is in landscape mode.
+ * @returns {boolean}
+ */
+export function isLandscape() {
+  if (typeof window === 'undefined') return false;
+  if (window.screen && window.screen.orientation && window.screen.orientation.type) {
+    return window.screen.orientation.type.includes('landscape');
+  }
+  return window.innerWidth > window.innerHeight;
 }
 
 /**
  * Gets current screen orientation angle in degrees (0, 90, 180, 270).
+ * Handles iOS/iPadOS window.orientation as well as modern screen.orientation.angle.
  * @returns {number}
  */
 export function getScreenOrientation() {
@@ -37,7 +65,31 @@ export function getScreenOrientation() {
 }
 
 /**
- * DeviceOrientationManager manages mobile gyroscope sensors, single-event stream binding,
+ * Updates responsive classes on document.body to support universal landscape/portrait
+ * styling for all cards, panels, and drawers across mobile phones, tablets, and iPads.
+ */
+export function updateDeviceOrientationClasses() {
+  if (typeof document === 'undefined' || !document.body) return;
+  const isMob = isMobileOrTablet();
+  const isLand = isLandscape();
+
+  document.body.classList.toggle('vz-mobile-tablet', isMob);
+  document.body.classList.toggle('vz-desktop', !isMob);
+  document.body.classList.toggle('vz-orientation-landscape', isLand);
+  document.body.classList.toggle('vz-orientation-portrait', !isLand);
+}
+
+// Initial invocation on load
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updateDeviceOrientationClasses);
+  } else {
+    updateDeviceOrientationClasses();
+  }
+}
+
+/**
+ * DeviceOrientationManager manages mobile & tablet gyroscope sensors, single-event stream binding,
  * smooth shortest-arc quaternion slerp, stationary vantage point locking, and touch-drag yaw panning.
  */
 export class DeviceOrientationManager {
@@ -76,7 +128,7 @@ export class DeviceOrientationManager {
     this._injectStyles();
     this._createUI();
 
-    // Auto-detect mobile and try auto-enabling on initial touch gesture
+    // Auto-detect mobile/tablet and try auto-enabling on initial touch gesture
     if (isMobileOrTablet()) {
       const autoEnableHandler = async () => {
         window.removeEventListener('touchstart', autoEnableHandler);
@@ -90,10 +142,19 @@ export class DeviceOrientationManager {
   }
 
   _initListeners() {
-    window.addEventListener('orientationchange', this._onScreenOrientationChange, false);
+    const handleOrient = () => {
+      this._onScreenOrientationChange();
+      // On iOS / iPadOS WebKit, screen dimensions / orientation angle can update with slight latency
+      setTimeout(() => this._onScreenOrientationChange(), 150);
+      setTimeout(() => this._onScreenOrientationChange(), 350);
+    };
+
+    window.addEventListener('orientationchange', handleOrient, false);
     if (window.screen && window.screen.orientation) {
-      window.screen.orientation.addEventListener('change', this._onScreenOrientationChange, false);
+      window.screen.orientation.addEventListener('change', handleOrient, false);
     }
+    window.addEventListener('resize', handleOrient, false);
+
     this._onScreenOrientationChange();
 
     // Touch swipe horizontal yaw offset (allows user to swipe to turn while gyro is active)
@@ -122,7 +183,52 @@ export class DeviceOrientationManager {
   }
 
   _onScreenOrientationChange() {
-    this.screenOrientation = getScreenOrientation();
+    const newOrient = getScreenOrientation();
+    const changed = this.screenOrientation !== newOrient;
+    this.screenOrientation = newOrient;
+    updateDeviceOrientationClasses();
+
+    // Recalibrate yaw offset on orientation change so view never jumps or tilts sideways!
+    if (changed && this.hasSensorData && this.rawAlpha !== null) {
+      this._calibrateHeading();
+    }
+  }
+
+  /**
+   * Computes device sensor quaternion according to standard W3C DeviceOrientation specification
+   * and screen orientation roll angle.
+   */
+  _computeDeviceQuaternion(alpha, beta, gamma, orient, outQuat) {
+    const alphaRad = THREE.MathUtils.degToRad(alpha);
+    const betaRad = THREE.MathUtils.degToRad(beta);
+    const gammaRad = THREE.MathUtils.degToRad(gamma);
+    const orientRad = THREE.MathUtils.degToRad(orient);
+
+    euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
+    outQuat.setFromEuler(euler);
+    outQuat.multiply(q1); // Camera looks out back of phone/tablet
+    outQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation roll
+  }
+
+  /**
+   * Calibrate horizontal yawOffset so camera smoothly aligns with current camera view direction
+   * without any sudden jump or flip, correctly factoring in screen orientation (portrait vs landscape).
+   */
+  _calibrateHeading() {
+    if (this.rawAlpha === null) return;
+    const tempQuat = new THREE.Quaternion();
+    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, this.screenOrientation, tempQuat);
+
+    // Forward direction of sensor orientation projected on horizontal XZ plane
+    const deviceForward = new THREE.Vector3(0, 0, -1).applyQuaternion(tempQuat);
+    const deviceYaw = Math.atan2(-deviceForward.x, -deviceForward.z);
+
+    // Current camera forward heading projected on horizontal XZ plane
+    const cameraForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    const cameraYaw = Math.atan2(-cameraForward.x, -cameraForward.z);
+
+    this.yawOffset = cameraYaw - deviceYaw;
+    this.initialHeadingCalibrated = true;
   }
 
   _onDeviceOrientation(event) {
@@ -134,18 +240,13 @@ export class DeviceOrientationManager {
 
     // Calibrate initial heading on first valid sensor reading so user starts seamlessly facing current view
     if (!this.initialHeadingCalibrated || this.rawAlpha === null) {
-      this.initialHeadingCalibrated = true;
       this.rawAlpha = inAlpha;
       this.rawBeta = inBeta;
       this.rawGamma = inGamma;
-
-      // Calculate existing camera forward heading
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-      const currentCameraYaw = Math.atan2(-forward.x, -forward.z);
-      const deviceAlphaRad = THREE.MathUtils.degToRad(inAlpha);
-      this.yawOffset = currentCameraYaw - (Math.PI - deviceAlphaRad);
-      this.currentQuat.copy(this.camera.quaternion);
       this.hasSensorData = true;
+
+      this._calibrateHeading();
+      this.currentQuat.copy(this.camera.quaternion);
 
       if (this._uiBtn && !this._uiBtn.classList.contains('active')) {
         this._updateUIState(true);
@@ -218,7 +319,6 @@ export class DeviceOrientationManager {
     }
 
     // Select ONE single event stream: if deviceorientationabsolute exists and works, use it; otherwise standard deviceorientation
-    // NEVER bind both at the same time to avoid alternating 180-degree flip oscillations between relative and absolute north!
     const useAbsolute = ('ondeviceorientationabsolute' in window);
     this._activeEventListener = useAbsolute ? 'deviceorientationabsolute' : 'deviceorientation';
     window.addEventListener(this._activeEventListener, this._onDeviceOrientation, false);
@@ -270,16 +370,7 @@ export class DeviceOrientationManager {
   update(dt = 0.016) {
     if (!this.enabled || !this.hasSensorData || this.rawAlpha === null) return;
 
-    const alphaRad = THREE.MathUtils.degToRad(this.rawAlpha);
-    const betaRad = THREE.MathUtils.degToRad(this.rawBeta);
-    const gammaRad = THREE.MathUtils.degToRad(this.rawGamma);
-    const orientRad = THREE.MathUtils.degToRad(this.screenOrientation);
-
-    // Standard camera rotation transform
-    euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
-    this.targetQuat.setFromEuler(euler);
-    this.targetQuat.multiply(q1); // Camera looks out back of phone
-    this.targetQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation
+    this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, this.screenOrientation, this.targetQuat);
 
     // Apply horizontal yaw offset from initial calibration & touch swipe panning
     if (this.yawOffset !== 0) {

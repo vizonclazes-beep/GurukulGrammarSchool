@@ -1,5 +1,6 @@
 // src/environment/rocketTelemetry.js — Rich Aerospace Datasets & Interactive Telemetry UI for Rockets
 import * as THREE from 'three';
+import { isMobileOrTablet } from '../ui/deviceOrientation.js';
 
 export const ROCKET_DATA = {
   // ── ISRO OPERATIONAL ──
@@ -310,14 +311,6 @@ export function createRocketTelemetry(parentGroup, camera) {
   let activeMesh = null;
   const baseCardPos = new THREE.Vector3();
 
-  // Helper to detect mobile mode (viewports <= 768px or mobile/touch devices)
-  function isMobileMode() {
-    return (
-      window.innerWidth <= 768 ||
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-      ('ontouchstart' in window && window.innerWidth <= 1024)
-    );
-  }
 
   // 1. 3D Floating Holographic Card (High-Definition 1024x640 Canvas)
   const canvas = document.createElement('canvas');
@@ -395,7 +388,7 @@ export function createRocketTelemetry(parentGroup, camera) {
           box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 24px rgba(0, 229, 255, 0.2);
           backdrop-filter: blur(16px);
           -webkit-backdrop-filter: blur(16px);
-          transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+          transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
           opacity: 0;
           z-index: 9999;
           pointer-events: auto;
@@ -404,11 +397,78 @@ export function createRocketTelemetry(parentGroup, camera) {
           right: 24px;
           opacity: 1;
         }
-        /* Completely suppress 2D popup drawer list on mobile devices */
-        @media (max-width: 768px) {
+
+        /* ── PORTRAIT MODE (Phones & Tablets) ──
+           Transforms the rocket data display into a bottom sheet drawer, keeping the rocket visible above */
+        @media (orientation: portrait), (max-width: 640px) and (orientation: portrait) {
           #rocket-telemetry-hud {
-            display: none !important;
-            pointer-events: none !important;
+            bottom: 74px;
+            left: 12px;
+            right: 12px;
+            width: auto;
+            max-width: calc(100vw - 24px);
+            max-height: 52vh;
+            padding: 16px 18px;
+            border-radius: 16px;
+            transform: translateY(120%);
+            transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+          }
+          #rocket-telemetry-hud.active {
+            transform: translateY(0);
+            right: 12px;
+            opacity: 1;
+          }
+          .rkt-title {
+            font-size: 20px;
+          }
+          .rkt-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 10px;
+            padding: 10px 12px;
+          }
+        }
+
+        /* ── LANDSCAPE MODE (Phones, Tablets & iPads) ──
+           Adapts into a landscape side-drawer on the right, keeping center and left open for the rocket */
+        @media (orientation: landscape) and (max-height: 850px) {
+          #rocket-telemetry-hud {
+            top: 12px;
+            bottom: 58px;
+            right: -520px;
+            left: auto;
+            width: 440px;
+            max-width: calc(100vw - 80px);
+            max-height: calc(100vh - 70px);
+            padding: 14px 18px;
+            border-radius: 14px;
+            transform: none;
+            transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+          }
+          #rocket-telemetry-hud.active {
+            right: 14px;
+            opacity: 1;
+          }
+          .rkt-title {
+            font-size: 20px;
+          }
+          .rkt-grid {
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px 10px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+          }
+          .rkt-section {
+            margin-bottom: 10px;
+          }
+          .rkt-sec-body {
+            font-size: 11.5px;
+            line-height: 1.4;
+          }
+          .rkt-missions {
+            font-size: 10.5px;
+            line-height: 1.4;
+            padding: 6px 8px;
+            margin-bottom: 10px;
           }
         }
         .rkt-header {
@@ -843,50 +903,45 @@ export function createRocketTelemetry(parentGroup, camera) {
     reticleMat.color.set(data.accentColor);
     leaderLine.visible = true;
 
-    // Desktop Mode: Show rich 2D telemetry data drawer list
-    if (!isMobileMode()) {
-      const titleEl = document.getElementById('rkt-title');
-      const subEl = document.getElementById('rkt-sub');
-      const heightEl = document.getElementById('rkt-height');
-      const diaEl = document.getElementById('rkt-diameter');
-      const massEl = document.getElementById('rkt-mass');
-      const stagesEl = document.getElementById('rkt-stages');
-      const leoEl = document.getElementById('rkt-payload-leo');
-      const gtoEl = document.getElementById('rkt-payload-gto');
-      const propEl = document.getElementById('rkt-propulsion');
-      const missEl = document.getElementById('rkt-missions');
-      const descEl = document.getElementById('rkt-description');
+    // Show rich 2D telemetry data drawer list across all platforms (mobile, tablet, iPad, desktop)
+    const titleEl = document.getElementById('rkt-title');
+    const subEl = document.getElementById('rkt-sub');
+    const heightEl = document.getElementById('rkt-height');
+    const diaEl = document.getElementById('rkt-diameter');
+    const massEl = document.getElementById('rkt-mass');
+    const stagesEl = document.getElementById('rkt-stages');
+    const leoEl = document.getElementById('rkt-payload-leo');
+    const gtoEl = document.getElementById('rkt-payload-gto');
+    const propEl = document.getElementById('rkt-propulsion');
+    const missEl = document.getElementById('rkt-missions');
+    const descEl = document.getElementById('rkt-description');
 
-      if (titleEl) titleEl.textContent = data.name;
-      if (subEl) subEl.textContent = `${data.fullName} // ${data.operator}`;
-      if (heightEl) heightEl.textContent = data.height;
-      if (diaEl) diaEl.textContent = data.diameter;
-      if (massEl) massEl.textContent = data.liftOffMass;
-      if (stagesEl) stagesEl.textContent = data.stages;
-      if (leoEl) leoEl.textContent = data.payloadLeo;
-      if (gtoEl) gtoEl.textContent = data.payloadGto;
-      if (propEl) propEl.textContent = data.propulsion;
-      if (missEl) missEl.textContent = data.famousMissions;
-      if (descEl) descEl.textContent = data.description;
+    if (titleEl) titleEl.textContent = data.name;
+    if (subEl) subEl.textContent = `${data.fullName} // ${data.operator}`;
+    if (heightEl) heightEl.textContent = data.height;
+    if (diaEl) diaEl.textContent = data.diameter;
+    if (massEl) massEl.textContent = data.liftOffMass;
+    if (stagesEl) stagesEl.textContent = data.stages;
+    if (leoEl) leoEl.textContent = data.payloadLeo;
+    if (gtoEl) gtoEl.textContent = data.payloadGto;
+    if (propEl) propEl.textContent = data.propulsion;
+    if (missEl) missEl.textContent = data.famousMissions;
+    if (descEl) descEl.textContent = data.description;
 
-      const badgeContainer = document.getElementById('rkt-badge-container');
-      if (badgeContainer) {
-        badgeContainer.innerHTML = `
-          <span class="rkt-badge" style="background: ${data.statusColor}22; color: ${data.statusColor}; border: 1px solid ${data.statusColor}66;">
-            ● ${data.status}
-          </span>
-          <span class="rkt-badge" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); margin-left: 6px;">
-            ${data.category}
-          </span>
-        `;
-      }
-
-      hudContainer.style.borderLeftColor = data.accentColor;
-      hudContainer.classList.add('active');
-    } else {
-      // Mobile Mode: Ensure 2D popup drawer list is not active
-      hudContainer.classList.remove('active');
+    const badgeContainer = document.getElementById('rkt-badge-container');
+    if (badgeContainer) {
+      badgeContainer.innerHTML = `
+        <span class="rkt-badge" style="background: ${data.statusColor}22; color: ${data.statusColor}; border: 1px solid ${data.statusColor}66;">
+          ● ${data.status}
+        </span>
+        <span class="rkt-badge" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); margin-left: 6px;">
+          ${data.category}
+        </span>
+      `;
     }
+
+    hudContainer.style.borderLeftColor = data.accentColor;
+    hudContainer.classList.add('active');
   }
 
   function deselect() {
