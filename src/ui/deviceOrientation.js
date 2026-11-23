@@ -7,7 +7,6 @@ const up = new THREE.Vector3(0, 1, 0);
 const euler = new THREE.Euler();
 const q0 = new THREE.Quaternion();
 const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X axis
-const qIPadXFix = new THREE.Quaternion(Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // +PI/2 around X axis (neutralizes -90 deg shift for iPad)
 const qYaw = new THREE.Quaternion();
 
 /**
@@ -241,6 +240,7 @@ export class DeviceOrientationManager {
       window.screen.orientation.addEventListener('change', handleOrient, false);
     }
     window.addEventListener('resize', handleOrient, false);
+    this._unsubOrient = onOrientationChange(handleOrient);
 
     this._onScreenOrientationChange();
 
@@ -294,6 +294,21 @@ export class DeviceOrientationManager {
   }
 
   /**
+   * Returns effective orientation angle (0, 90, -90, 180), falling back to physical gravity
+   * orientation when the device OS orientation is locked in portrait.
+   * @returns {number}
+   */
+  _getEffectiveOrientation() {
+    if (this.screenOrientation !== 0) {
+      return this.screenOrientation;
+    }
+    if (Math.abs(physicalOrientation) === 90) {
+      return physicalOrientation;
+    }
+    return 0;
+  }
+
+  /**
    * Computes device sensor quaternion according to standard W3C DeviceOrientation specification
    * and screen orientation roll angle.
    */
@@ -306,9 +321,6 @@ export class DeviceOrientationManager {
     euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
     outQuat.setFromEuler(euler);
     outQuat.multiply(q1); // Camera looks out back of phone/tablet
-    if (isIPad()) {
-      outQuat.multiply(qIPadXFix); // Neutralize -90 degree X-axis pitch specifically for iPad gyro 360
-    }
     outQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation roll
   }
 
@@ -319,7 +331,7 @@ export class DeviceOrientationManager {
   _calibrateHeading() {
     if (this.rawAlpha === null) return;
     const tempQuat = new THREE.Quaternion();
-    const effOrient = isLockedInPortrait() ? 0 : this.screenOrientation;
+    const effOrient = this._getEffectiveOrientation();
     this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, effOrient, tempQuat);
 
     // Forward direction of sensor orientation projected on horizontal XZ plane
@@ -488,9 +500,7 @@ export class DeviceOrientationManager {
   update(dt = 0.016) {
     if (!this.enabled || !this.hasSensorData || this.rawAlpha === null) return;
 
-    // When virtual rotation is active, the CSS transform rotates the canvas frame,
-    // so orient angle relative to the canvas is 0.
-    const effOrient = isLockedInPortrait() ? 0 : this.screenOrientation;
+    const effOrient = this._getEffectiveOrientation();
     this._computeDeviceQuaternion(this.rawAlpha, this.rawBeta, this.rawGamma, effOrient, this.targetQuat);
 
     // Apply horizontal yaw offset from initial calibration & touch swipe panning
