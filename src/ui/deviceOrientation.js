@@ -7,7 +7,6 @@ const up = new THREE.Vector3(0, 1, 0);
 const euler = new THREE.Euler();
 const q0 = new THREE.Quaternion();
 const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X axis
-const qIPadXFix = new THREE.Quaternion(Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // +PI/2 around X axis (neutralizes -90 deg shift for iPad)
 const qYaw = new THREE.Quaternion();
 
 /**
@@ -25,10 +24,13 @@ export function getViewportRoot() {
  */
 export function isIPad() {
   if (typeof navigator === 'undefined') return false;
-  return (
-    /iPad/i.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1)
-  );
+  const ua = navigator.userAgent || '';
+  const isIPadUA = /iPad/i.test(ua);
+  const isMacIntelTouch =
+    (navigator.platform === 'MacIntel' || /Macintosh/i.test(ua)) &&
+    typeof navigator.maxTouchPoints === 'number' &&
+    navigator.maxTouchPoints > 1;
+  return isIPadUA || isMacIntelTouch;
 }
 
 /**
@@ -99,6 +101,7 @@ export function getPhysicalOrientation() {
  */
 export function isLockedInPortrait() {
   if (typeof window === 'undefined') return false;
+  if (isIPad()) return false; // iPads have native viewport orientation and do not use virtual portrait-lock rotation
   const isPhysLand = Math.abs(physicalOrientation) === 90;
   const isViewportPortrait = window.innerWidth < window.innerHeight;
   return isPhysLand && isViewportPortrait;
@@ -298,17 +301,18 @@ export class DeviceOrientationManager {
    * and screen orientation roll angle.
    */
   _computeDeviceQuaternion(alpha, beta, gamma, orient, outQuat) {
+    // On iPad, Safari handles viewport rotation directly in landscape,
+    // so adding screen orientation roll causes the 3D scene to tilt 90 degrees sideways.
+    const effOrient = isIPad() ? 0 : orient;
+
     const alphaRad = THREE.MathUtils.degToRad(alpha);
     const betaRad = THREE.MathUtils.degToRad(beta);
     const gammaRad = THREE.MathUtils.degToRad(gamma);
-    const orientRad = THREE.MathUtils.degToRad(orient);
+    const orientRad = THREE.MathUtils.degToRad(effOrient);
 
     euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
     outQuat.setFromEuler(euler);
     outQuat.multiply(q1); // Camera looks out back of phone/tablet
-    if (isIPad()) {
-      outQuat.multiply(qIPadXFix); // Neutralize -90 degree X-axis pitch specifically for iPad gyro 360
-    }
     outQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation roll
   }
 
