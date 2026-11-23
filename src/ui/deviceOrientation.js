@@ -7,6 +7,7 @@ const up = new THREE.Vector3(0, 1, 0);
 const euler = new THREE.Euler();
 const q0 = new THREE.Quaternion();
 const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -PI/2 around X axis
+const qIPadXFix = new THREE.Quaternion(Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // +PI/2 around X axis (neutralizes -90 deg shift for iPad)
 const qYaw = new THREE.Quaternion();
 
 /**
@@ -305,6 +306,9 @@ export class DeviceOrientationManager {
     euler.set(betaRad, alphaRad, -gammaRad, 'YXZ');
     outQuat.setFromEuler(euler);
     outQuat.multiply(q1); // Camera looks out back of phone/tablet
+    if (isIPad()) {
+      outQuat.multiply(qIPadXFix); // Neutralize -90 degree X-axis pitch specifically for iPad gyro 360
+    }
     outQuat.multiply(q0.setFromAxisAngle(zee, -orientRad)); // Screen orientation roll
   }
 
