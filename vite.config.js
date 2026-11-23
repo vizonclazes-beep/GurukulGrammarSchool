@@ -2,10 +2,16 @@ import { defineConfig } from 'vite';
 import glsl from 'vite-plugin-glsl';
 
 export default defineConfig({
+  base: './',
   plugins: [glsl()],
   server: {
     host: true,
-    port: 5173,
+    port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
+  },
+  preview: {
+    host: true,
+    port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
+    allowedHosts: true,
   },
   build: {
     target: 'esnext',
